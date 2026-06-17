@@ -40,7 +40,7 @@ class TopProducts extends TableWidget
                     ->label('')
                     ->disk('public')
                     ->imageSize(48)
-                    ->defaultImageUrl(asset('images/logo.jpg'))
+                    ->defaultImageUrl(asset('images/logo.png'))
                     ->extraImgAttributes(['class' => 'rounded-lg object-cover']),
 
                 TextColumn::make('product.name')

@@ -43,7 +43,7 @@ class StockAlerts extends TableWidget
                     ->label('')
                     ->disk('public')
                     ->imageSize(36)
-                    ->defaultImageUrl(asset('images/logo.jpg'))
+                    ->defaultImageUrl(asset('images/logo.png'))
                     ->extraImgAttributes(['class' => 'rounded object-cover']),
 
                 TextColumn::make('name')
