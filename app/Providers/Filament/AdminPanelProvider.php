@@ -35,11 +35,13 @@ class AdminPanelProvider extends PanelProvider
             ->brandName('')
             ->brandLogo(asset('images/logo.jpg'))
             ->brandLogoHeight('7rem')
-            ->favicon(asset('images/logo.jpg'))
+            ->favicon(asset('images/favicon.png'))
             ->colors([
                 'primary' => Color::hex('#FF6500'),
                 'gray'    => Color::Zinc,
             ])
+            ->databaseNotifications()
+            ->databaseNotificationsPolling('10s')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([

@@ -2,11 +2,15 @@
 
 namespace App\Filament\Resources\Products\Tables;
 
+use App\Filament\Resources\Products\Actions\AdjustProductPricesAction;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\ForceDeleteBulkAction;
+use Filament\Actions\RestoreAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Forms\Components\TextInput;
 use Filament\Tables\Columns\IconColumn;
@@ -23,6 +27,8 @@ class ProductsTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->recordUrl(null)
+            ->recordAction('edit')
             ->columns([
                 ImageColumn::make('image')
                     ->label('Imagen')
@@ -132,10 +138,17 @@ class ProductsTable
                     ->fillForm(fn ($record): array => ['barcode' => $record->barcode])
                     ->action(fn ($record, array $data) => $record->update(['barcode' => $data['barcode'] ?: null]))
                     ->successNotificationTitle('Código asignado correctamente'),
-                EditAction::make(),
+                EditAction::make()
+                    ->modal()
+                    ->slideOver()
+                    ->modalWidth('3xl'),
+                DeleteAction::make(),
+                ForceDeleteAction::make(),
+                RestoreAction::make(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
+                    AdjustProductPricesAction::bulk(),
                     DeleteBulkAction::make(),
                     ForceDeleteBulkAction::make(),
                     RestoreBulkAction::make(),

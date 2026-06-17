@@ -168,3 +168,117 @@
 .dark .carga-rapida-recent-item + .carga-rapida-recent-item {
     border-top-color: rgb(255 255 255 / 0.06);
 }
+
+/* ── Importar desde archivo ───────────────────────────────── */
+.carga-archivo-dropzone {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    min-height: 11rem;
+    padding: 2rem 1.5rem;
+    border-radius: 1rem;
+    border: 2px dashed rgb(0 0 0 / 0.12);
+    background: rgb(249 250 251 / 0.6);
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.carga-archivo-dropzone:hover {
+    border-color: rgb(255 101 0 / 0.45);
+    background: rgb(255 101 0 / 0.04);
+}
+
+.carga-archivo-dropzone--dragging {
+    border-color: rgb(255 101 0 / 0.7);
+    background: rgb(255 101 0 / 0.08);
+    box-shadow: 0 0 0 4px rgb(255 101 0 / 0.12);
+}
+
+.carga-archivo-dropzone--has-file {
+    border-style: solid;
+    border-color: rgb(255 101 0 / 0.35);
+    background: rgb(255 101 0 / 0.05);
+    cursor: default;
+}
+
+.dark .carga-archivo-dropzone {
+    border-color: rgb(255 255 255 / 0.15);
+    background: rgb(255 255 255 / 0.02);
+}
+
+.dark .carga-archivo-dropzone:hover {
+    border-color: rgb(255 101 0 / 0.5);
+    background: rgb(255 101 0 / 0.08);
+}
+
+.dark .carga-archivo-dropzone--dragging {
+    border-color: rgb(255 101 0 / 0.7);
+    background: rgb(255 101 0 / 0.12);
+    box-shadow: 0 0 0 4px rgb(255 101 0 / 0.15);
+}
+
+.dark .carga-archivo-dropzone--has-file {
+    border-color: rgb(255 101 0 / 0.4);
+    background: rgb(255 101 0 / 0.1);
+}
+
+.carga-archivo-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.875rem;
+}
+
+.carga-archivo-step-num {
+    display: flex;
+    height: 1.75rem;
+    width: 1.75rem;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.carga-archivo-step-num--active {
+    background: rgb(255 101 0 / 0.15);
+    color: #e55a00;
+}
+
+.carga-archivo-step-num--done {
+    background: rgb(var(--success-500) / 0.15);
+    color: rgb(var(--success-600));
+}
+
+.carga-archivo-step-num--pending {
+    background: rgb(0 0 0 / 0.06);
+    color: rgb(107 114 128);
+}
+
+.dark .carga-archivo-step-num--pending {
+    background: rgb(255 255 255 / 0.08);
+    color: rgb(156 163 175);
+}
+
+.carga-archivo-loading-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    border-radius: 1rem;
+    background: rgb(255 255 255 / 0.88);
+    backdrop-filter: blur(4px);
+}
+
+.dark .carga-archivo-loading-overlay {
+    background: rgb(24 24 27 / 0.92);
+}

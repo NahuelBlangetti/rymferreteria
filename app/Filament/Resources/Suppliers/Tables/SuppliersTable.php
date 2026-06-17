@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Suppliers\Tables;
 
+use App\Filament\Resources\Products\Actions\AdjustProductPricesAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -61,6 +62,8 @@ class SuppliersTable
                 TernaryFilter::make('active')->label('Activos'),
             ])
             ->recordActions([
+                AdjustProductPricesAction::make()
+                    ->modalHeading(fn ($record): string => "Ajustar precios — {$record->name}"),
                 EditAction::make(),
             ])
             ->toolbarActions([
