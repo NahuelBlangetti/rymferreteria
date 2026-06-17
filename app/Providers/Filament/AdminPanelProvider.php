@@ -33,8 +33,9 @@ class AdminPanelProvider extends PanelProvider
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->login()
             ->brandName('')
-            ->brandLogo(asset('images/logo.png'))
-            ->brandLogoHeight('5rem')
+            ->brandLogo(asset('images/logo-compact.png'))
+            ->darkModeBrandLogo(asset('images/logo-compact-dark.png'))
+            ->brandLogoHeight('2.75rem')
             ->favicon(asset('images/favicon.png'))
             ->colors([
                 'primary' => Color::hex('#FF6500'),

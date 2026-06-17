@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Products\Tables;
 
 use App\Filament\Resources\Products\Actions\AdjustProductPricesAction;
+use App\Filament\Resources\Products\Actions\ExportProductsPdfAction;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
@@ -147,8 +148,9 @@ class ProductsTable
                 RestoreAction::make(),
             ])
             ->toolbarActions([
+                AdjustProductPricesAction::bulk(),
+                ExportProductsPdfAction::bulk(),
                 BulkActionGroup::make([
-                    AdjustProductPricesAction::bulk(),
                     DeleteBulkAction::make(),
                     ForceDeleteBulkAction::make(),
                     RestoreBulkAction::make(),

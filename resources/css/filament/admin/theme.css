@@ -3,6 +3,26 @@
 @source '../../../../app/Filament/**/*';
 @source '../../../../resources/views/filament/**/*';
 
+/* ── Logo RyM ─────────────────────────────────────────────── */
+.fi-sidebar-header-logo-ctn {
+    padding-block: 0.5rem;
+}
+
+/* No forzar display en .fi-logo: Filament alterna fi-logo-light / fi-logo-dark */
+.fi-sidebar-header-logo-ctn .fi-logo img,
+.fi-topbar-start .fi-logo img {
+    width: auto !important;
+    max-width: 100%;
+    object-fit: contain;
+}
+
+.fi-simple-header .fi-logo img {
+    width: auto !important;
+    height: 3.75rem !important;
+    max-width: min(100%, 16rem);
+    object-fit: contain;
+}
+
 /* ── Carga Rápida ─────────────────────────────────────────── */
 .carga-rapida-layout {
     display: flex;
