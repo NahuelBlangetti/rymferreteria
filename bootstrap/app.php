@@ -37,6 +37,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 return;
             }
 
+            if ($exception instanceof \Illuminate\Queue\MaxAttemptsExceededException) {
+                return;
+            }
+
             $notifyDiscord($exception);
         });
     })->create();

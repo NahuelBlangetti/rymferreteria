@@ -20,7 +20,11 @@ class NotifyHttpErrorsToDiscord
 
         $status = $response->getStatusCode();
 
-        if ($status < 403 || $status === 404) {
+        if (
+            $status < 403
+            || $status === 404
+            || $request->is('up')
+        ) {
             return $response;
         }
 

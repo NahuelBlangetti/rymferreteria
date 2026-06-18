@@ -71,6 +71,8 @@ class CargarProductos extends Page
     public string $importedFileSize = '';
     public bool   $supplierAutoDetected = false;
     public array  $pendingImports = [];
+    public ?array $duplicateImport = null;
+    public string $pendingFileHash = '';
 
     private const MAX_FILE_MB = 25;
 
@@ -310,6 +312,8 @@ class CargarProductos extends Page
     public function updatedImportFile(): void
     {
         $this->supplierAutoDetected = false;
+        $this->duplicateImport = null;
+        $this->pendingFileHash = '';
 
         if (! $this->importFile) {
             $this->importedFileName = '';
@@ -325,11 +329,47 @@ class CargarProductos extends Page
             $this->importedFileSize = '';
         }
 
+        // Compute hash and check for previously processed identical file.
+        try {
+            $hash = hash_file('sha256', $this->importFile->getRealPath());
+            $this->pendingFileHash = $hash;
+
+            $existing = ProductImport::where('file_hash', $hash)
+                ->where('user_id', auth()->id())
+                ->whereNotIn('status', ['error'])
+                ->latest()
+                ->first();
+
+            if ($existing) {
+                $this->duplicateImport = [
+                    'filename'      => $existing->filename,
+                    'product_count' => $existing->product_count,
+                    'processed_at'  => $existing->processed_at?->format('d/m/Y \a\l\a\s H:i'),
+                    'status'        => $existing->status,
+                ];
+            }
+        } catch (\Throwable) {
+            // Si falla la lectura del hash, continuamos sin validación.
+        }
+
         $matched = $this->guessSupplierFromFilename($this->importedFileName);
 
         if ($matched) {
             $this->applyDetectedSupplier($matched);
         }
+    }
+
+    public function cancelDuplicate(): void
+    {
+        $this->clearImportFile();
+        $this->duplicateImport = null;
+        $this->pendingFileHash = '';
+    }
+
+    public function forceProcess(): void
+    {
+        $this->duplicateImport = null;
+        $this->processFile();
     }
 
     private function applyDetectedSupplier(array $matched): void
@@ -395,6 +435,8 @@ class CargarProductos extends Page
         }
 
         try {
+            $hash = $this->pendingFileHash ?: hash_file('sha256', $this->importFile->getRealPath());
+
             $filePath = $this->importFile->storeAs('imports', uniqid('import_') . '.' . $extension, 'local');
             $this->importFile = null;
 
@@ -411,6 +453,7 @@ class CargarProductos extends Page
                 'supplier_id' => $this->importSupplierId,
                 'filename'    => $originalName,
                 'file_path'   => $filePath,
+                'file_hash'   => $hash,
                 'status'      => 'pending',
             ]);
 
@@ -426,7 +469,7 @@ class CargarProductos extends Page
 
     public function startOver(): void
     {
-        $this->reset(['importFile', 'errorMessage', 'importedFileName', 'importedFileSize', 'supplierAutoDetected']);
+        $this->reset(['importFile', 'errorMessage', 'importedFileName', 'importedFileSize', 'supplierAutoDetected', 'duplicateImport', 'pendingFileHash']);
         $this->state = 'idle';
     }
 
@@ -436,6 +479,8 @@ class CargarProductos extends Page
         $this->importedFileName = '';
         $this->importedFileSize = '';
         $this->supplierAutoDetected = false;
+        $this->duplicateImport = null;
+        $this->pendingFileHash = '';
         $this->resetValidation('importFile');
     }
 }

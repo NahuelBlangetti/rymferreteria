@@ -493,6 +493,54 @@
                                 </div>
                             @endif
 
+                            {{-- Banner: archivo duplicado detectado --}}
+                            @if ($duplicateImport)
+                                <div class="overflow-hidden rounded-xl border border-warning-200 bg-warning-50 dark:border-warning-500/20 dark:bg-warning-500/5">
+                                    <div class="flex items-start gap-3 px-4 py-4">
+                                        <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-warning-500 text-white shadow-sm">
+                                            <x-filament::icon icon="heroicon-o-arrow-path" class="h-4 w-4" />
+                                        </span>
+                                        <div class="min-w-0 flex-1">
+                                            <p class="text-sm font-semibold text-warning-800 dark:text-warning-300">
+                                                Este archivo ya fue procesado
+                                            </p>
+                                            <p class="mt-1 text-xs text-warning-700 dark:text-warning-400">
+                                                <span class="font-medium">{{ $duplicateImport['filename'] }}</span>
+                                                @if ($duplicateImport['processed_at'])
+                                                    · {{ $duplicateImport['processed_at'] }}
+                                                @endif
+                                                @if ($duplicateImport['product_count'] > 0)
+                                                    · {{ $duplicateImport['product_count'] }} {{ $duplicateImport['product_count'] === 1 ? 'producto' : 'productos' }}
+                                                @endif
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center justify-end gap-2 border-t border-warning-200 bg-warning-100/50 px-4 py-3 dark:border-warning-500/20 dark:bg-warning-500/10">
+                                        <button
+                                            wire:click="cancelDuplicate"
+                                            type="button"
+                                            class="inline-flex items-center gap-1.5 rounded-lg border border-warning-300 bg-white px-3.5 py-2 text-xs font-medium text-warning-700 transition hover:bg-warning-50 dark:border-warning-500/30 dark:bg-transparent dark:text-warning-300 dark:hover:bg-warning-500/10"
+                                        >
+                                            <x-filament::icon icon="heroicon-o-x-mark" class="h-3.5 w-3.5" />
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            wire:click="forceProcess"
+                                            wire:loading.attr="disabled"
+                                            wire:target="forceProcess"
+                                            type="button"
+                                            class="inline-flex items-center gap-1.5 rounded-lg bg-warning-500 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-warning-400 focus:outline-none focus:ring-2 focus:ring-warning-400/50 disabled:opacity-60"
+                                        >
+                                            <span wire:loading.remove wire:target="forceProcess" class="inline-flex items-center gap-1.5">
+                                                <x-filament::icon icon="heroicon-o-arrow-path" class="h-3.5 w-3.5" />
+                                                Sí, procesar de nuevo
+                                            </span>
+                                            <span wire:loading wire:target="forceProcess">Procesando…</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            @endif
+
                             {{-- Zona drag & drop --}}
                             <div>
                                 <label class="mb-2.5 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -605,6 +653,7 @@
                             </div>
 
                             {{-- Acción --}}
+                            @if (! $duplicateImport)
                             <div class="carga-rapida-actions !mt-0 !border-t-0 !pt-0">
                                 <button
                                     wire:click="processFile"
@@ -627,6 +676,7 @@
                                     </span>
                                 </button>
                             </div>
+                            @endif
                         </div>
                     </div>
                 </div>

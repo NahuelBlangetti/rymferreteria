@@ -13,6 +13,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -109,36 +110,64 @@ class ProcessImportFile implements ShouldQueue
                 ->sendToDatabase($import->user);
 
         } catch (\Throwable $e) {
-            $import->update([
-                'status'        => 'error',
-                'error_message' => $e->getMessage(),
-            ]);
+            $this->failImport($import, $e);
+        } finally {
+            if (Storage::disk('local')->exists($import->file_path)) {
+                Storage::disk('local')->delete($import->file_path);
+            }
+        }
+    }
 
-            // Error técnico → Discord (para diagnóstico interno)
+    public function failed(\Throwable $exception): void
+    {
+        $import = ProductImport::with('user')->find($this->importId);
+
+        if (! $import) {
+            return;
+        }
+
+        if ($import->status === 'done') {
+            return;
+        }
+
+        $this->failImport($import, $exception, notifyDiscord: ! ($exception instanceof MaxAttemptsExceededException));
+    }
+
+    private function failImport(ProductImport $import, \Throwable $e, bool $notifyDiscord = true): void
+    {
+        $import->loadMissing('user');
+
+        $message = $e instanceof MaxAttemptsExceededException
+            ? 'El procesamiento tardó demasiado o el servidor se quedó sin memoria. Probá con un archivo más chico.'
+            : $e->getMessage();
+
+        $import->update([
+            'status'        => 'error',
+            'error_message' => $message,
+        ]);
+
+        if ($notifyDiscord) {
             (new DiscordNotifier())->notify(
                 '❌ Error al procesar importación',
                 sprintf(
                     "**Archivo:** %s\n**Usuario:** %s\n**Error:** %s\n**Línea:** %s:%d",
                     $import->filename,
                     $import->user->email ?? "ID {$import->user_id}",
-                    $e->getMessage(),
+                    $message,
                     basename($e->getFile()),
                     $e->getLine()
                 ),
-                0xED4245 // rojo Discord
+                0xED4245
             );
+        }
 
-            // Mensaje amigable → usuario (sin detalles técnicos)
+        if ($import->user) {
             Notification::make()
                 ->title('No se pudo procesar el archivo')
                 ->body("Ocurrió un error analizando \"{$import->filename}\". Por favor intentá de nuevo más tarde. Si el problema persiste, contactá a soporte.")
                 ->danger()
                 ->persistent()
                 ->sendToDatabase($import->user);
-        } finally {
-            if (Storage::disk('local')->exists($import->file_path)) {
-                Storage::disk('local')->delete($import->file_path);
-            }
         }
     }
 

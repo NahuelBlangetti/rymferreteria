@@ -12,6 +12,7 @@ class ProductImport extends Model
         'supplier_id',
         'filename',
         'file_path',
+        'file_hash',
         'status',
         'products',
         'error_message',
