@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\CashRegisters\Tables;
 
+use App\Filament\Resources\CashRegisters\Actions\CloseCashRegisterAction;
+use App\Models\CashRegister;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -19,19 +21,37 @@ class CashRegistersTable
                     ->searchable(),
                 TextColumn::make('opening_amount')
                     ->label('Monto apertura')
-                    ->numeric()
+                    ->money('ARS')
                     ->sortable(),
+                TextColumn::make('cash_sales_total')
+                    ->label('Ventas efectivo')
+                    ->state(fn (CashRegister $record): float => $record->cashSalesTotal())
+                    ->money('ARS'),
+                TextColumn::make('transfer_sales_total')
+                    ->label('Ventas transferencia')
+                    ->state(fn (CashRegister $record): float => $record->transferSalesTotal())
+                    ->money('ARS')
+                    ->placeholder('—'),
                 TextColumn::make('closing_amount')
                     ->label('Monto cierre')
-                    ->numeric()
+                    ->money('ARS')
+                    ->placeholder('—')
                     ->sortable(),
                 TextColumn::make('expected_amount')
                     ->label('Monto esperado')
-                    ->numeric()
+                    ->money('ARS')
+                    ->placeholder('—')
                     ->sortable(),
                 TextColumn::make('difference')
                     ->label('Diferencia')
-                    ->numeric()
+                    ->money('ARS')
+                    ->placeholder('—')
+                    ->color(fn (?string $state): string => match (true) {
+                        $state === null => 'gray',
+                        (float) $state > 0  => 'success',
+                        (float) $state < 0  => 'danger',
+                        default             => 'gray',
+                    })
                     ->sortable(),
                 TextColumn::make('opened_at')
                     ->label('Apertura')
@@ -40,6 +60,7 @@ class CashRegistersTable
                 TextColumn::make('closed_at')
                     ->label('Cierre')
                     ->dateTime('d/m/Y H:i')
+                    ->placeholder('—')
                     ->sortable(),
                 TextColumn::make('status')
                     ->label('Estado')
@@ -65,11 +86,14 @@ class CashRegistersTable
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
+            ->defaultSort('opened_at', 'desc')
             ->filters([
                 //
             ])
             ->recordActions([
-                EditAction::make(),
+                CloseCashRegisterAction::make(),
+                EditAction::make()
+                    ->label(fn (CashRegister $record): string => $record->status === 'open' ? 'Gestionar' : 'Ver'),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

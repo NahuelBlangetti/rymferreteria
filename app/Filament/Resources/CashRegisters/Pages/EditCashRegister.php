@@ -2,19 +2,41 @@
 
 namespace App\Filament\Resources\CashRegisters\Pages;
 
+use App\Filament\Resources\CashRegisters\Actions\CloseCashRegisterAction;
 use App\Filament\Resources\CashRegisters\CashRegisterResource;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
-use Illuminate\Support\Facades\DB;
 
 class EditCashRegister extends EditRecord
 {
     protected static string $resource = CashRegisterResource::class;
 
+    public function getTitle(): string
+    {
+        if ($this->record->status === 'open') {
+            return 'Caja abierta';
+        }
+
+        return 'Detalle de caja';
+    }
+
+    protected function getFormActions(): array
+    {
+        if ($this->record->status === 'closed') {
+            return [];
+        }
+
+        return parent::getFormActions();
+    }
+
     protected function getHeaderActions(): array
     {
         return [
+            CloseCashRegisterAction::make()
+                ->after(function (): void {
+                    $this->redirect(static::getResource()::getUrl('index'));
+                }),
             Action::make('delete')
                 ->label('Eliminar')
                 ->color('danger')
@@ -22,6 +44,7 @@ class EditCashRegister extends EditRecord
                 ->requiresConfirmation()
                 ->modalHeading('¿Eliminar esta caja?')
                 ->modalDescription('Esta acción no se puede deshacer.')
+                ->visible(fn (): bool => $this->record->status === 'closed')
                 ->action(function () {
                     if ($this->record->sales()->exists()) {
                         Notification::make()
@@ -47,13 +70,11 @@ class EditCashRegister extends EditRecord
 
     protected function beforeSave(): void
     {
-        $data = $this->form->getState();
-
-        if ($this->record->status === 'closed' && $data['status'] === 'open') {
+        if ($this->record->status === 'closed') {
             Notification::make()
-                ->title('No se puede reabrir una caja cerrada')
-                ->body('Una vez cerrada, la caja es un registro histórico inmutable. Abrí una nueva caja para el próximo turno.')
-                ->danger()
+                ->title('Caja cerrada')
+                ->body('Los registros de caja cerrada no se pueden modificar.')
+                ->warning()
                 ->send();
 
             $this->halt();

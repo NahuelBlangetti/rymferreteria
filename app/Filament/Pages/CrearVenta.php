@@ -29,9 +29,8 @@ class CrearVenta extends Page
 
     protected string $view = 'filament.pages.crear-venta';
 
-    // Barcode / búsqueda manual
-    public string $barcodeInput = '';
-    public string $searchQuery  = '';
+    // Búsqueda / escáner unificado
+    public string $productQuery  = '';
     public array  $searchResults = [];
 
     // Carrito
@@ -62,53 +61,81 @@ class CrearVenta extends Page
         return CashRegister::where('status', 'open')->exists();
     }
 
-    // ── Escáner de código de barras ────────────────────────────────────
+    // ── Búsqueda / escáner unificado ───────────────────────────────────
 
-    public function addByBarcode(): void
+    public function updatedProductQuery(): void
     {
-        $code = trim($this->barcodeInput);
-        $this->barcodeInput = '';
+        $query = trim($this->productQuery);
 
-        if (empty($code)) {
-            return;
-        }
-
-        $product = Product::where('active', true)
-            ->where(fn ($q) => $q->where('barcode', $code)->orWhere('sku', $code))
-            ->first();
-
-        if (! $product) {
-            Notification::make()
-                ->title("Código no encontrado: {$code}")
-                ->warning()
-                ->send();
-
-            return;
-        }
-
-        $this->addToCart($product->id);
-    }
-
-    // ── Búsqueda manual (live search) ─────────────────────────────────
-
-    public function updatedSearchQuery(): void
-    {
-        if (strlen($this->searchQuery) < 2) {
+        if (strlen($query) < 2) {
             $this->searchResults = [];
 
             return;
         }
 
-        $this->searchResults = Product::where('active', true)
+        $this->searchResults = $this->findProducts($query);
+    }
+
+    public function addProduct(): void
+    {
+        $query = trim($this->productQuery);
+
+        if ($query === '') {
+            return;
+        }
+
+        $exact = Product::where('active', true)
+            ->where(fn ($q) => $q->where('barcode', $query)->orWhere('sku', $query))
+            ->first();
+
+        if ($exact) {
+            $this->resetProductSearch();
+            $this->addToCart($exact->id);
+            $this->dispatch('focus-product-search');
+
+            return;
+        }
+
+        if (strlen($query) >= 2 && empty($this->searchResults)) {
+            $this->searchResults = $this->findProducts($query);
+        }
+
+        if (count($this->searchResults) === 1) {
+            $productId = $this->searchResults[0]['id'];
+            $this->resetProductSearch();
+            $this->addToCart($productId);
+            $this->dispatch('focus-product-search');
+
+            return;
+        }
+
+        Notification::make()
+            ->title('Producto no encontrado')
+            ->body(count($this->searchResults) > 1
+                ? 'Hay varios resultados. Seleccioná uno de la lista.'
+                : "No hay productos para \"{$query}\".")
+            ->warning()
+            ->send();
+    }
+
+    private function findProducts(string $query): array
+    {
+        return Product::where('active', true)
             ->where(fn ($q) => $q
-                ->where('name', 'like', "%{$this->searchQuery}%")
-                ->orWhere('sku', 'like', "%{$this->searchQuery}%")
-                ->orWhere('barcode', 'like', "%{$this->searchQuery}%")
+                ->where('name', 'like', "%{$query}%")
+                ->orWhere('sku', 'like', "%{$query}%")
+                ->orWhere('barcode', 'like', "%{$query}%")
             )
             ->orderBy('name')
             ->limit(8)
-            ->get(['id', 'name', 'sale_price', 'stock', 'unit', 'image'])
+            ->get(['id', 'name', 'sale_price', 'stock', 'unit', 'sku', 'barcode'])
             ->toArray();
+    }
+
+    private function resetProductSearch(): void
+    {
+        $this->productQuery  = '';
+        $this->searchResults = [];
     }
 
     // ── Carrito ────────────────────────────────────────────────────────
@@ -171,8 +198,8 @@ class CrearVenta extends Page
             ];
         }
 
-        $this->searchQuery   = '';
-        $this->searchResults = [];
+        $this->resetProductSearch();
+        $this->dispatch('focus-product-search');
 
         Notification::make()
             ->title("{$product->name} agregado")

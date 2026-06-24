@@ -29,72 +29,72 @@
         x-data="{}"
     >
         {{-- ══════════════════════════════════════════
-             PANEL IZQUIERDO: Búsqueda + escáner
+             PANEL IZQUIERDO: Buscar / escanear producto
         ══════════════════════════════════════════ --}}
         <div class="flex flex-col gap-4 lg:col-span-3">
 
-            {{-- Escáner de código de barras --}}
-            <div class="fi-section rounded-xl bg-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
-                <div class="fi-section-header flex items-center gap-3 px-6 py-4 border-b border-gray-200 dark:border-white/10">
-                    <x-filament::icon
-                        icon="heroicon-o-qr-code"
-                        class="h-5 w-5 text-primary-500"
-                    />
-                    <h3 class="fi-section-header-heading text-base font-semibold text-gray-950 dark:text-white">
-                        Escáner / Código de barras
-                    </h3>
+            <div class="carga-rapida-card">
+                <div class="carga-rapida-card-header">
+                    <div class="flex items-center gap-3">
+                        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-500/10 text-primary-600 dark:text-primary-400">
+                            <x-filament::icon icon="heroicon-o-magnifying-glass" class="h-5 w-5" />
+                        </span>
+                        <div>
+                            <h3 class="text-base font-semibold text-gray-950 dark:text-white">
+                                Buscar o escanear producto
+                            </h3>
+                            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                Escaneá un código, buscá por nombre, SKU o código de barras
+                            </p>
+                        </div>
+                    </div>
                 </div>
-                <div class="px-6 py-4">
-                    <div class="flex gap-3">
-                        <div class="flex-1">
+
+                <div class="carga-rapida-card-body">
+                    <div class="carga-rapida-scanner-row">
+                        <div class="relative min-w-0 flex-1">
+                            <span class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
+                                <x-filament::icon icon="heroicon-o-qr-code" wire:loading.remove wire:target="addProduct" class="h-5 w-5 text-gray-400" />
+                                <svg wire:loading wire:target="addProduct" class="h-5 w-5 animate-spin text-primary-500" viewBox="0 0 24 24" fill="none">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                                </svg>
+                            </span>
                             <input
-                                wire:model="barcodeInput"
-                                wire:keydown.enter="addByBarcode"
+                                wire:model.live.debounce.300ms="productQuery"
+                                wire:keydown.enter.prevent="addProduct"
                                 type="text"
-                                placeholder="Apuntá el escáner aquí o escribí el código..."
+                                placeholder="Apuntá el escáner aquí o buscá por nombre, SKU o código…"
                                 autocomplete="off"
                                 x-init="$el.focus()"
-                                class="fi-input w-full block rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 shadow-sm transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-white/20 dark:bg-white/5 dark:text-white dark:placeholder-gray-400"
+                                x-on:focus-product-search.window="$nextTick(() => $el.focus())"
+                                class="carga-rapida-input fi-input block w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 text-sm text-gray-900 shadow-sm transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-white/15 dark:bg-white/5 dark:text-white dark:placeholder-gray-500"
                             />
                         </div>
+
                         <button
-                            wire:click="addByBarcode"
+                            wire:click="addProduct"
+                            wire:loading.attr="disabled"
+                            wire:target="addProduct"
                             type="button"
-                            class="fi-btn fi-btn-color-primary fi-btn-size-md inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            class="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-primary-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40 disabled:opacity-60 sm:w-auto"
                         >
-                            <x-filament::icon icon="heroicon-o-plus" class="h-4 w-4" />
-                            Agregar
+                            <x-filament::icon icon="heroicon-o-plus" class="h-4 w-4" wire:loading.remove wire:target="addProduct" />
+                            <span wire:loading.remove wire:target="addProduct">Agregar</span>
+                            <span wire:loading wire:target="addProduct">Buscando…</span>
                         </button>
                     </div>
-                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                        Presioná <kbd class="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-xs font-mono dark:border-white/20 dark:bg-white/10">Enter</kbd> o hacé clic en Agregar. El escáner 1D funciona automáticamente.
-                    </p>
-                </div>
-            </div>
 
-            {{-- Búsqueda manual --}}
-            <div class="fi-section rounded-xl bg-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
-                <div class="fi-section-header flex items-center gap-3 px-6 py-4 border-b border-gray-200 dark:border-white/10">
-                    <x-filament::icon
-                        icon="heroicon-o-magnifying-glass"
-                        class="h-5 w-5 text-primary-500"
-                    />
-                    <h3 class="fi-section-header-heading text-base font-semibold text-gray-950 dark:text-white">
-                        Búsqueda de productos
-                    </h3>
-                </div>
-                <div class="px-6 py-4">
-                    <input
-                        wire:model.live.debounce.300ms="searchQuery"
-                        type="text"
-                        placeholder="Buscá por nombre, SKU o código..."
-                        autocomplete="off"
-                        class="fi-input w-full block rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 shadow-sm transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-white/20 dark:bg-white/5 dark:text-white dark:placeholder-gray-400"
-                    />
+                    <div class="carga-rapida-footer-row !mt-4 !border-t-0 !pt-0">
+                        <p class="text-sm text-gray-500 dark:text-gray-400">
+                            Presioná <kbd class="rounded border border-gray-300 bg-gray-100 px-1.5 py-0.5 text-xs font-mono dark:border-white/20 dark:bg-white/10">Enter</kbd>
+                            o hacé clic en Agregar. El escáner 1D funciona automáticamente.
+                        </p>
+                    </div>
 
                     {{-- Resultados de búsqueda --}}
                     @if (count($searchResults) > 0)
-                        <div class="mt-3 divide-y divide-gray-100 dark:divide-white/10 rounded-lg border border-gray-200 dark:border-white/10 overflow-hidden">
+                        <div class="mt-4 divide-y divide-gray-100 dark:divide-white/10 rounded-xl border border-gray-200 dark:border-white/10 overflow-hidden">
                             @foreach ($searchResults as $product)
                                 <button
                                     wire:click="addToCart({{ $product['id'] }})"
@@ -107,6 +107,9 @@
                                         </p>
                                         <p class="text-xs text-gray-500 dark:text-gray-400">
                                             Stock: {{ $product['stock'] }} {{ $product['unit'] }}
+                                            @if (! empty($product['sku']))
+                                                · SKU: {{ $product['sku'] }}
+                                            @endif
                                         </p>
                                     </div>
                                     <div class="text-right shrink-0">
@@ -132,10 +135,10 @@
                                 </button>
                             @endforeach
                         </div>
-                    @elseif (strlen($searchQuery) >= 2)
-                        <div class="mt-3 rounded-lg border border-dashed border-gray-300 dark:border-white/10 px-4 py-6 text-center">
+                    @elseif (strlen(trim($productQuery)) >= 2)
+                        <div class="mt-4 rounded-xl border border-dashed border-gray-300 dark:border-white/10 px-4 py-6 text-center">
                             <x-filament::icon icon="heroicon-o-face-frown" class="mx-auto h-8 w-8 text-gray-400" />
-                            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">No se encontraron productos para "{{ $searchQuery }}"</p>
+                            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">No se encontraron productos para "{{ $productQuery }}"</p>
                         </div>
                     @endif
                 </div>
@@ -182,7 +185,7 @@
                         <div class="py-8 text-center">
                             <x-filament::icon icon="heroicon-o-shopping-cart" class="mx-auto h-10 w-10 text-gray-300 dark:text-gray-600" />
                             <p class="mt-3 text-sm text-gray-400 dark:text-gray-500">
-                                El carrito está vacío.<br>Escaneá o buscá un producto.
+                                El carrito está vacío.<br>Buscá o escaneá un producto arriba.
                             </p>
                         </div>
                     @else
