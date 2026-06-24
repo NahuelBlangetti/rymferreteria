@@ -71,7 +71,21 @@ class ValidarImport extends Page
         $import = ProductImport::where('id', $id)
             ->where('user_id', auth()->user()?->getAuthIdentifier())
             ->where('status', 'done')
-            ->firstOrFail();
+            ->first();
+
+        if (! $import) {
+            // La notificación que linkea acá puede haber quedado vieja (importación
+            // ya validada o eliminada): la limpiamos para que no siga apareciendo.
+            $this->dismissImportNotification($id);
+
+            Notification::make()
+                ->title('Esta importación ya fue procesada')
+                ->info()
+                ->send();
+
+            $this->redirectRoute('filament.admin.pages.cargar-productos');
+            return;
+        }
 
         $this->importId         = $import->id;
         $this->importedFileName = $import->filename;
@@ -184,6 +198,7 @@ class ValidarImport extends Page
         // Marcar importación como validada
         if ($this->importId) {
             ProductImport::where('id', $this->importId)->update(['status' => 'validated']);
+            $this->dismissImportNotification($this->importId);
         }
 
         $parts = [];
@@ -196,6 +211,17 @@ class ValidarImport extends Page
             ->send();
 
         $this->redirectRoute('filament.admin.pages.cargar-productos');
+    }
+
+    // Elimina la notificación persistente "Revisar y guardar →" de esta importación
+    // para que deje de aparecer una vez que ya fue validada (o ya no existe).
+    private function dismissImportNotification(int $importId): void
+    {
+        $url = self::getUrl(['id' => $importId]);
+
+        auth()->user()?->notifications()
+            ->whereJsonContains('data->actions', ['url' => $url])
+            ->delete();
     }
 
     private function normalizeUnit(?string $raw): string
