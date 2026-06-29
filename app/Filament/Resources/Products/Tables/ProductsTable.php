@@ -5,21 +5,13 @@ namespace App\Filament\Resources\Products\Tables;
 use App\Filament\Resources\Products\Actions\AdjustProductPricesAction;
 use App\Filament\Resources\Products\Actions\ExportProductsPdfAction;
 use Filament\Actions\Action;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Actions\ForceDeleteAction;
-use Filament\Actions\ForceDeleteBulkAction;
-use Filament\Actions\RestoreAction;
-use Filament\Actions\RestoreBulkAction;
 use Filament\Forms\Components\TextInput;
-use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
-use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -35,7 +27,8 @@ class ProductsTable
                     ->label('Imagen')
                     ->disk('public')
                     ->square()
-                    ->imageSize(48),
+                    ->imageSize(48)
+                    ->toggleable(),
                 TextColumn::make('name')
                     ->label('Nombre')
                     ->searchable()
@@ -47,15 +40,16 @@ class ProductsTable
                     ->badge()
                     ->color(fn ($state): string => $state ? 'gray' : 'warning')
                     ->icon(fn ($state): string => $state ? 'heroicon-o-check-circle' : 'heroicon-o-exclamation-circle'),
-                TextColumn::make('category.name')
-                    ->label('Categoría')
-                    ->badge()
-                    ->sortable(),
                 TextColumn::make('supplier.name')
                     ->label('Proveedor')
                     ->sortable()
                     ->placeholder('—')
-                    ->toggleable(),
+                    ->searchable(),
+                TextColumn::make('category.name')
+                    ->label('Categoría')
+                    ->badge()
+                    ->sortable()
+                    ->searchable(),
                 TextColumn::make('unit')
                     ->label('Unidad')
                     ->formatStateUsing(fn (string $state): string => match ($state) {
@@ -72,7 +66,8 @@ class ProductsTable
                         default  => $state,
                     })
                     ->badge()
-                    ->color('gray'),
+                    ->color('gray')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('cost_price')
                     ->label('Costo')
                     ->money('ARS')
@@ -83,12 +78,12 @@ class ProductsTable
                     ->formatStateUsing(fn ($state): string => $state ? number_format($state, 1) . '%' : '—')
                     ->badge()
                     ->color(fn ($state): string => match (true) {
-                        $state === null  => 'gray',
-                        $state < 15      => 'danger',
-                        $state < 25      => 'warning',
-                        default          => 'success',
+                        $state === null => 'gray',
+                        $state < 15     => 'danger',
+                        $state < 25     => 'warning',
+                        default         => 'success',
                     })
-                    ->toggleable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('sale_price')
                     ->label('Precio venta')
                     ->money('ARS')
@@ -99,27 +94,34 @@ class ProductsTable
                     ->sortable()
                     ->badge()
                     ->color(fn (int $state, $record): string => match (true) {
-                        $state <= 0                  => 'danger',
+                        $state <= 0                   => 'danger',
                         $state <= $record->min_stock => 'warning',
-                        default                      => 'success',
+                        default                       => 'success',
                     }),
-                IconColumn::make('active')
-                    ->label('Activo')
-                    ->boolean(),
             ])
             ->filters([
-                Filter::make('incomplete')
-                    ->label('Sin completar (cargados desde escáner)')
-                    ->query(fn (Builder $query): Builder => $query->whereNull('category_id')->where('cost_price', 0))
-                    ->toggle(),
-                SelectFilter::make('category')
-                    ->relationship('category', 'name')
-                    ->label('Categoría'),
                 SelectFilter::make('supplier')
-                    ->relationship('supplier', 'name')
-                    ->label('Proveedor'),
-                TrashedFilter::make(),
-            ])
+                    ->relationship('supplier', 'name', fn (Builder $query) => $query->where('active', true)->orderBy('name'))
+                    ->label('Proveedor')
+                    ->searchable()
+                    ->preload()
+                    ->placeholder('Todos los proveedores')
+                    ->native(false),
+                SelectFilter::make('category')
+                    ->relationship('category', 'name', fn (Builder $query) => $query->orderBy('name'))
+                    ->label('Categoría')
+                    ->searchable()
+                    ->preload()
+                    ->placeholder('Todas las categorías')
+                    ->native(false),
+                Filter::make('incomplete')
+                    ->label('Sin completar')
+                    ->toggle()
+                    ->query(fn (Builder $query): Builder => $query->whereNull('category_id')->where('cost_price', 0)),
+            ], layout: FiltersLayout::AboveContent)
+            ->filtersFormColumns(['default' => 1, 'sm' => 2, 'lg' => 3])
+            ->deferFilters(false)
+            ->persistFiltersInSession()
             ->recordActions([
                 Action::make('assignBarcode')
                     ->label('Asignar código')
@@ -143,18 +145,11 @@ class ProductsTable
                     ->modal()
                     ->slideOver()
                     ->modalWidth('3xl'),
-                DeleteAction::make(),
-                ForceDeleteAction::make(),
-                RestoreAction::make(),
             ])
             ->toolbarActions([
+                ExportProductsPdfAction::bulk('price_list'),
+                ExportProductsPdfAction::bulk('inventory'),
                 AdjustProductPricesAction::bulk(),
-                ExportProductsPdfAction::bulk(),
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                    ForceDeleteBulkAction::make(),
-                    RestoreBulkAction::make(),
-                ]),
             ]);
     }
 }
