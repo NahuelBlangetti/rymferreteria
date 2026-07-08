@@ -2,12 +2,15 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Actions\ConfigurePrinterAction;
 use App\Models\CashRegister;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\StockMovement;
+use App\Services\Tickets\SaleTicketEscPosBuilder;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -28,6 +31,16 @@ class CrearVenta extends Page
     protected static ?int $navigationSort = 0;
 
     protected string $view = 'filament.pages.crear-venta';
+
+    /**
+     * @return array<Action>
+     */
+    protected function getHeaderActions(): array
+    {
+        return [
+            ConfigurePrinterAction::make(),
+        ];
+    }
 
     // Búsqueda / escáner unificado
     public string $productQuery  = '';
@@ -277,8 +290,10 @@ class CrearVenta extends Page
             return;
         }
 
+        $sale = null;
+
         try {
-            DB::transaction(function () use ($cashRegister) {
+            DB::transaction(function () use ($cashRegister, &$sale) {
                 // Lock all products upfront and validate stock before crear nada
                 $products = [];
 
@@ -353,6 +368,9 @@ class CrearVenta extends Page
         $this->cartItems     = [];
         $this->paymentMethod = '';
         $this->notes         = '';
+
+        $ticket = app(SaleTicketEscPosBuilder::class)->build($sale);
+        $this->dispatch('print-escpos-ticket', content: $ticket);
 
         Notification::make()
             ->title("¡Venta {$this->lastSaleNumber} registrada!")

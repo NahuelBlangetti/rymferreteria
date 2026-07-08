@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Products\Tables;
 
 use App\Filament\Resources\Products\Actions\AdjustProductPricesAction;
 use App\Filament\Resources\Products\Actions\ExportProductsPdfAction;
+use App\Filament\Resources\Products\Actions\PrintLabelAction;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\TextInput;
@@ -141,6 +142,7 @@ class ProductsTable
                     ->fillForm(fn ($record): array => ['barcode' => $record->barcode])
                     ->action(fn ($record, array $data) => $record->update(['barcode' => $data['barcode'] ?: null]))
                     ->successNotificationTitle('Código asignado correctamente'),
+                PrintLabelAction::make(),
                 EditAction::make()
                     ->modal()
                     ->slideOver()
@@ -150,6 +152,7 @@ class ProductsTable
                 ExportProductsPdfAction::bulk('price_list'),
                 ExportProductsPdfAction::bulk('inventory'),
                 AdjustProductPricesAction::bulk(),
+                PrintLabelAction::bulk(),
             ]);
     }
 }
