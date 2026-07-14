@@ -8,14 +8,16 @@ use App\Models\SaleItem;
 class SaleTicketEscPosBuilder
 {
     /**
-     * La Inkspire POS-80 dispone de 72 mm imprimibles. En fuente A, tamaño
-     * doble (2x ancho y 2x alto), entran 24 caracteres por línea.
+     * La Inkspire POS-80 dispone de 72 mm imprimibles. En fuente A a tamaño
+     * normal entran 48 caracteres por línea; a doble ancho el texto queda
+     * demasiado grande y corta palabras a la mitad, así que solo se usa
+     * negrita/doble alto (sin duplicar el ancho) para destacar.
      */
-    private const WIDTH = 24;
+    private const WIDTH = 48;
 
-    private const DOUBLE_SIZE = 48;
+    private const BOLD = 8;
 
-    private const DOUBLE_SIZE_BOLD = 56;
+    private const BOLD_TALL = 24; // negrita + doble alto, sin duplicar ancho
 
     private const ESC = "\x1B";
 
@@ -32,11 +34,10 @@ class SaleTicketEscPosBuilder
         $sale->loadMissing('items');
 
         $ticket = self::ESC.'@'; // Reset impresora
-        $ticket .= self::ESC.'!'.chr(self::DOUBLE_SIZE);
 
-        $ticket .= self::ESC.'!'.chr(self::DOUBLE_SIZE_BOLD);
+        $ticket .= self::ESC.'!'.chr(self::BOLD_TALL);
         $ticket .= $this->centered('RyM Ferretería');
-        $ticket .= self::ESC.'!'.chr(self::DOUBLE_SIZE);
+        $ticket .= self::ESC.'!'.chr(0);
         $ticket .= $this->centered('Comprobante no válido como factura');
         $ticket .= $this->centered($sale->created_at->format('d/m/Y H:i'));
         $ticket .= $this->centered("Venta {$sale->sale_number}");
@@ -53,9 +54,9 @@ class SaleTicketEscPosBuilder
             $ticket .= $this->totalLine('Descuento', (float) $sale->discount);
         }
 
-        $ticket .= self::ESC.'!'.chr(self::DOUBLE_SIZE_BOLD);
+        $ticket .= self::ESC.'!'.chr(self::BOLD);
         $ticket .= $this->totalLine('TOTAL', (float) $sale->total);
-        $ticket .= self::ESC.'!'.chr(self::DOUBLE_SIZE);
+        $ticket .= self::ESC.'!'.chr(0);
         $ticket .= $this->separator();
 
         $ticket .= "\n";
@@ -81,10 +82,11 @@ class SaleTicketEscPosBuilder
         $qtyLabel = $this->formatNumber($qty);
         $unitPrice = $this->formatNumber((float) $item->unit_price);
         $subtotal = $this->formatNumber((float) $item->subtotal);
+        $productName = $this->sanitize($item->product_name);
 
         $head = $qty == 1.0
-            ? $item->product_name
-            : "{$qtyLabel} x {$item->product_name}";
+            ? $productName
+            : "{$qtyLabel} x {$productName}";
 
         if (mb_strlen($head) + 1 + mb_strlen($subtotal) <= self::WIDTH) {
             return $this->padRight($head, self::WIDTH - mb_strlen($subtotal)).$subtotal."\n";
@@ -145,8 +147,28 @@ class SaleTicketEscPosBuilder
     private function totalLine(string $label, float $amount): string
     {
         $right = $this->formatNumber($amount);
+        $label = $this->sanitize($label);
 
         return $this->padRight($label.':', self::WIDTH - mb_strlen($right)).$right."\n";
+    }
+
+    /**
+     * El firmware de esta impresora (clon OCPP-58H) no interpreta la
+     * codificación UTF-8: los caracteres multibyte (tildes, ñ, ¡, ¿) se
+     * imprimen como bytes sueltos ilegibles y además rompen el conteo de
+     * ancho de línea, provocando cortes de palabra. Se translitera todo el
+     * texto a ASCII antes de mandarlo a la impresora.
+     */
+    private function sanitize(string $text): string
+    {
+        static $map = [
+            'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u',
+            'Á' => 'A', 'É' => 'E', 'Í' => 'I', 'Ó' => 'O', 'Ú' => 'U',
+            'ñ' => 'n', 'Ñ' => 'N', 'ü' => 'u', 'Ü' => 'U',
+            '¡' => '', '¿' => '',
+        ];
+
+        return strtr($text, $map);
     }
 
     private function formatNumber(float $value): string
@@ -164,7 +186,7 @@ class SaleTicketEscPosBuilder
     {
         $out = '';
 
-        foreach ($this->wrap($text) as $line) {
+        foreach ($this->wrap($this->sanitize($text)) as $line) {
             $padding = max(0, intdiv(self::WIDTH - mb_strlen($line), 2));
             $out .= str_repeat(' ', $padding).$line."\n";
         }
