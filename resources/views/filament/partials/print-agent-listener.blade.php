@@ -49,6 +49,35 @@
             return window.resolvePrinterByType(agentUrl, 'ticket', 'ticket_printer_name');
         };
 
+        {{--
+            El POST a /print/label o /print/ticket sólo confirma que el
+            trabajo quedó encolado (status "queued"), no que se imprimió: el
+            agente lo procesa en background y recién ahí puede fallar (papel,
+            impresora offline, error de Windows, etc). Por eso hay que
+            sondear /print/job/{id} para saber el resultado real.
+        --}}
+        window.pollPrintJob = async function (agentUrl, jobId, { intervalMs = 400, timeoutMs = 8000 } = {}) {
+            const start = Date.now();
+
+            while (Date.now() - start < timeoutMs) {
+                await new Promise((resolve) => setTimeout(resolve, intervalMs));
+
+                try {
+                    const res = await fetch(`${agentUrl}/print/job/${jobId}`);
+                    if (!res.ok) continue;
+
+                    const job = await res.json();
+                    if (job.status === 'done' || job.status === 'failed') {
+                        return job;
+                    }
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            return null;
+        };
+
         window.sendToPrintAgent = async function ({ endpoint, resolvePrinter, content, notFoundTitle, notFoundBody, successTitle }) {
             const agentUrl = localStorage.getItem('zebra_print_agent_url') || 'http://127.0.0.1:58432';
             const printer = await resolvePrinter(agentUrl);
@@ -68,6 +97,29 @@
 
                 if (!res.ok) {
                     throw new Error(`HTTP ${res.status}`);
+                }
+
+                const job = await res.json();
+                const finalJob = await window.pollPrintJob(agentUrl, job.job_id);
+
+                if (finalJob?.status === 'failed') {
+                    new FilamentNotification()
+                        .title('La impresora rechazó el trabajo')
+                        .body(finalJob.detail ?? ('No se pudo imprimir en "' + printer + '".'))
+                        .danger()
+                        .send();
+
+                    return;
+                }
+
+                if (finalJob === null) {
+                    new FilamentNotification()
+                        .title('Trabajo enviado, sin confirmación')
+                        .body('El agente lo encoló pero no se pudo confirmar que haya terminado de imprimir en "' + printer + '".')
+                        .warning()
+                        .send();
+
+                    return;
                 }
 
                 new FilamentNotification().title(successTitle).success().send();

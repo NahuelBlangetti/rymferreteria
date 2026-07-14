@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Sales\Tables;
 
+use App\Filament\Resources\Sales\Actions\PrintTicketAction;
 use App\Models\Sale;
 use App\Models\StockMovement;
 use Filament\Actions\BulkActionGroup;
@@ -82,6 +83,7 @@ class SalesTable
                     ]),
             ])
             ->recordActions([
+                PrintTicketAction::make(),
                 EditAction::make(),
             ])
             ->toolbarActions([

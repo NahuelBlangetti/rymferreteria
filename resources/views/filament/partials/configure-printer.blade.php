@@ -50,15 +50,17 @@
                 this.loading = false;
             }
         },
-        save() {
+        save(notify = true) {
             localStorage.setItem('zebra_print_agent_url', this.agentUrl);
             for (const role of this.roles) {
                 localStorage.setItem(role.key, this.selected[role.key]);
             }
-            new FilamentNotification()
-                .title('Impresoras guardadas en este navegador')
-                .success()
-                .send();
+            if (notify) {
+                new FilamentNotification()
+                    .title('Impresoras guardadas en este navegador')
+                    .success()
+                    .send();
+            }
         },
     }"
     x-init="loadPrinters()"
@@ -105,6 +107,7 @@
 
                     <select
                         x-model="selected[role.key]"
+                        @change="save(false)"
                         class="mt-1 block w-full rounded-lg border border-gray-300 bg-white text-sm text-gray-900 shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 dark:border-white/15 dark:bg-white/5 dark:text-white"
                     >
                         <option value="">Seleccioná una impresora…</option>
