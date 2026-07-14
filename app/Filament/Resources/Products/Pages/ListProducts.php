@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\Products\Pages;
 
-use App\Filament\Actions\ConfigurePrinterAction;
 use App\Filament\Resources\Products\Actions\AdjustProductPricesAction;
 use App\Filament\Resources\Products\ProductResource;
 use Filament\Actions\CreateAction;
@@ -20,7 +19,6 @@ class ListProducts extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            ConfigurePrinterAction::make(),
             AdjustProductPricesAction::make(),
             CreateAction::make(),
         ];
