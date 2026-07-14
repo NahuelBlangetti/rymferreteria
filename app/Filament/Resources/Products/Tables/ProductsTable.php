@@ -41,6 +41,10 @@ class ProductsTable
                     ->badge()
                     ->color(fn ($state): string => $state ? 'gray' : 'warning')
                     ->icon(fn ($state): string => $state ? 'heroicon-o-check-circle' : 'heroicon-o-exclamation-circle'),
+                TextColumn::make('sku')
+                    ->label('SKU')
+                    ->placeholder('Sin SKU')
+                    ->searchable(),
                 TextColumn::make('supplier.name')
                     ->label('Proveedor')
                     ->sortable()

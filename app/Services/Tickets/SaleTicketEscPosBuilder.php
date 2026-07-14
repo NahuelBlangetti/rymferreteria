@@ -58,18 +58,41 @@ class SaleTicketEscPosBuilder
         return $ticket;
     }
 
+    /**
+     * Arma la linea de un item aprovechando el ancho disponible: si el
+     * nombre entra junto con el importe en una sola linea, no gasta una
+     * linea aparte solo para el detalle de cantidad/precio unitario (que
+     * ademas es redundante cuando la cantidad es 1).
+     */
     private function itemLine(SaleItem $item): string
     {
-        $qty = $this->formatNumber((float) $item->quantity);
+        $qty = (float) $item->quantity;
+        $qtyLabel = $this->formatNumber($qty);
         $unitPrice = $this->formatNumber((float) $item->unit_price);
         $subtotal = $this->formatNumber((float) $item->subtotal);
 
-        $detail = "{$qty} x {$unitPrice}";
-        $amountLine = str_pad($detail, self::WIDTH - strlen($subtotal)).$subtotal."\n";
+        $head = $qty == 1.0
+            ? $item->product_name
+            : "{$qtyLabel} x {$item->product_name}";
 
-        $nameLines = $this->wrap($item->product_name);
+        if (mb_strlen($head) + 1 + mb_strlen($subtotal) <= self::WIDTH) {
+            return $this->padRight($head, self::WIDTH - mb_strlen($subtotal)).$subtotal."\n";
+        }
 
-        return implode("\n", $nameLines)."\n".$amountLine;
+        $detail = $qty == 1.0 ? '' : "{$qtyLabel} x {$unitPrice}";
+        $detailLine = $this->padRight($detail, self::WIDTH - mb_strlen($subtotal)).$subtotal."\n";
+
+        return implode("\n", $this->wrap($head))."\n".$detailLine;
+    }
+
+    /**
+     * str_pad() cuenta bytes, no caracteres: con tildes/ñ (multibyte en
+     * UTF-8) desalinea la columna de importes. Este helper rellena segun
+     * ancho visual real.
+     */
+    private function padRight(string $text, int $width): string
+    {
+        return $text.str_repeat(' ', max(0, $width - mb_strlen($text)));
     }
 
     /**
@@ -112,7 +135,7 @@ class SaleTicketEscPosBuilder
     {
         $right = $this->formatNumber($amount);
 
-        return str_pad($label.':', self::WIDTH - strlen($right)).$right."\n";
+        return $this->padRight($label.':', self::WIDTH - mb_strlen($right)).$right."\n";
     }
 
     private function formatNumber(float $value): string
