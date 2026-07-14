@@ -8,12 +8,14 @@ use App\Models\SaleItem;
 class SaleTicketEscPosBuilder
 {
     /**
-     * La Inkspire POS-80 dispone de 72 mm imprimibles. En fuente A a tamaño
-     * normal entran 48 caracteres por línea; a doble ancho el texto queda
+     * Según la ficha técnica real de la impresora (Inkspire, clon OCPP-58H):
+     * papel de 58 mm, 57.5 mm imprimibles, resolución de 384 puntos por
+     * línea. En fuente A (12x24 puntos, la fuente estándar) entran
+     * 384 / 12 = 32 caracteres por línea. A doble ancho el texto queda
      * demasiado grande y corta palabras a la mitad, así que solo se usa
      * negrita/doble alto (sin duplicar el ancho) para destacar.
      */
-    private const WIDTH = 48;
+    private const WIDTH = 32;
 
     private const BOLD = 8;
 
