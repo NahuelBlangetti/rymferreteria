@@ -8,9 +8,14 @@ use App\Models\SaleItem;
 class SaleTicketEscPosBuilder
 {
     /**
-     * Ancho en caracteres para impresoras termicas de 58mm (fuente estandar).
+     * La Inkspire POS-80 dispone de 72 mm imprimibles. En fuente A, tamaño
+     * doble (2x ancho y 2x alto), entran 24 caracteres por línea.
      */
-    private const WIDTH = 32;
+    private const WIDTH = 24;
+
+    private const DOUBLE_SIZE = 48;
+
+    private const DOUBLE_SIZE_BOLD = 56;
 
     private const ESC = "\x1B";
 
@@ -27,8 +32,11 @@ class SaleTicketEscPosBuilder
         $sale->loadMissing('items');
 
         $ticket = self::ESC.'@'; // Reset impresora
+        $ticket .= self::ESC.'!'.chr(self::DOUBLE_SIZE);
 
+        $ticket .= self::ESC.'!'.chr(self::DOUBLE_SIZE_BOLD);
         $ticket .= $this->centered('RyM Ferretería');
+        $ticket .= self::ESC.'!'.chr(self::DOUBLE_SIZE);
         $ticket .= $this->centered('Comprobante no válido como factura');
         $ticket .= $this->centered($sale->created_at->format('d/m/Y H:i'));
         $ticket .= $this->centered("Venta {$sale->sale_number}");
@@ -45,7 +53,9 @@ class SaleTicketEscPosBuilder
             $ticket .= $this->totalLine('Descuento', (float) $sale->discount);
         }
 
+        $ticket .= self::ESC.'!'.chr(self::DOUBLE_SIZE_BOLD);
         $ticket .= $this->totalLine('TOTAL', (float) $sale->total);
+        $ticket .= self::ESC.'!'.chr(self::DOUBLE_SIZE);
         $ticket .= $this->separator();
 
         $ticket .= "\n";
@@ -53,6 +63,7 @@ class SaleTicketEscPosBuilder
         $ticket .= "\n";
         $ticket .= $this->centered('¡Gracias por su compra!');
         $ticket .= "\n\n\n";
+        $ticket .= self::ESC.'!'.chr(0); // Restablecer tamaño de fuente
         $ticket .= self::GS.'V'.chr(0); // Corte de papel
 
         return $ticket;
