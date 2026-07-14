@@ -4,7 +4,6 @@ namespace App\Services\Tickets;
 
 use App\Models\Sale;
 use App\Models\SaleItem;
-use Illuminate\Support\Str;
 
 class SaleTicketEscPosBuilder
 {
@@ -29,7 +28,8 @@ class SaleTicketEscPosBuilder
 
         $ticket = self::ESC.'@'; // Reset impresora
 
-        $ticket .= $this->centered(self::ESC.'!'.chr(24)."RyM Ferretería".self::ESC.'!'.chr(0));
+        $ticket .= $this->centered('RyM Ferretería');
+        $ticket .= $this->centered('Comprobante no válido como factura');
         $ticket .= $this->centered($sale->created_at->format('d/m/Y H:i'));
         $ticket .= $this->centered("Venta {$sale->sale_number}");
         $ticket .= $this->separator();
@@ -45,9 +45,8 @@ class SaleTicketEscPosBuilder
             $ticket .= $this->totalLine('Descuento', (float) $sale->discount);
         }
 
-        $ticket .= self::ESC.'!'.chr(8); // Bold
         $ticket .= $this->totalLine('TOTAL', (float) $sale->total);
-        $ticket .= self::ESC.'!'.chr(0); // Bold off
+        $ticket .= $this->separator();
 
         $ticket .= "\n";
         $ticket .= 'Medio de pago: '.(self::PAYMENT_LABELS[$sale->payment_method] ?? $sale->payment_method)."\n";
@@ -62,13 +61,51 @@ class SaleTicketEscPosBuilder
     private function itemLine(SaleItem $item): string
     {
         $qty = $this->formatNumber((float) $item->quantity);
+        $unitPrice = $this->formatNumber((float) $item->unit_price);
         $subtotal = $this->formatNumber((float) $item->subtotal);
-        $prefix = "{$qty} x ";
 
-        $maxNameLength = max(1, self::WIDTH - strlen($subtotal) - strlen($prefix));
-        $left = $prefix.Str::limit($item->product_name, $maxNameLength, '');
+        $detail = "{$qty} x {$unitPrice}";
+        $amountLine = str_pad($detail, self::WIDTH - strlen($subtotal)).$subtotal."\n";
 
-        return str_pad($left, self::WIDTH - strlen($subtotal)).$subtotal."\n";
+        $nameLines = $this->wrap($item->product_name);
+
+        return implode("\n", $nameLines)."\n".$amountLine;
+    }
+
+    /**
+     * Parte $text en lineas de a lo sumo self::WIDTH caracteres, respetando
+     * palabras completas (y cortando a la fuerza si una palabra sola supera
+     * el ancho del ticket).
+     *
+     * @return list<string>
+     */
+    private function wrap(string $text): array
+    {
+        $words = preg_split('/\s+/', trim($text)) ?: [];
+        $lines = [];
+        $current = '';
+
+        foreach ($words as $word) {
+            while (mb_strlen($word) > self::WIDTH) {
+                $lines[] = mb_substr($word, 0, self::WIDTH);
+                $word = mb_substr($word, self::WIDTH);
+            }
+
+            $candidate = $current === '' ? $word : "{$current} {$word}";
+
+            if (mb_strlen($candidate) > self::WIDTH) {
+                $lines[] = $current;
+                $current = $word;
+            } else {
+                $current = $candidate;
+            }
+        }
+
+        if ($current !== '') {
+            $lines[] = $current;
+        }
+
+        return $lines === [] ? [''] : $lines;
     }
 
     private function totalLine(string $label, float $amount): string
@@ -83,9 +120,22 @@ class SaleTicketEscPosBuilder
         return number_format($value, 2, ',', '.');
     }
 
+    /**
+     * Centra $text a mano en vez de usar el comando ESC/POS "ESC a" (justificar):
+     * el firmware de esta impresora (clon OCPP-58H) no lo soporta y termina
+     * imprimiendo los bytes del comando como texto literal en vez de
+     * ejecutarlo. Envuelve el texto si no entra en el ancho del ticket.
+     */
     private function centered(string $text): string
     {
-        return self::ESC.'a'.chr(1).$text."\n".self::ESC.'a'.chr(0);
+        $out = '';
+
+        foreach ($this->wrap($text) as $line) {
+            $padding = max(0, intdiv(self::WIDTH - mb_strlen($line), 2));
+            $out .= str_repeat(' ', $padding).$line."\n";
+        }
+
+        return $out;
     }
 
     private function separator(): string
