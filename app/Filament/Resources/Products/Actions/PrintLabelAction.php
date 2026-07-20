@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\Products\Actions;
 
 use App\Models\Product;
-use App\Services\Labels\ProductLabelZplBuilder;
+use App\Services\Labels\ProductLabelEscPosBuilder;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Forms\Components\TextInput;
@@ -21,7 +21,7 @@ class PrintLabelAction
             ->icon('heroicon-o-printer')
             ->color('gray')
             ->modalHeading('Imprimir etiqueta de código de barras')
-            ->modalDescription('Se envía a la impresora Zebra configurada en este navegador.')
+            ->modalDescription('Se envía a la impresora de tickets configurada en este navegador.')
             ->modalSubmitActionLabel('Imprimir')
             ->modalWidth('sm')
             ->disabled(fn (Product $record): bool => blank($record->barcode))
@@ -38,9 +38,9 @@ class PrintLabelAction
                     ->required(),
             ])
             ->action(function (Product $record, array $data, HasTable $livewire): void {
-                $zpl = app(ProductLabelZplBuilder::class)->build($record, (int) $data['copies']);
+                $ticket = app(ProductLabelEscPosBuilder::class)->build($record, (int) $data['copies']);
 
-                $livewire->dispatch('print-zpl-label', content: $zpl);
+                $livewire->dispatch('print-escpos-ticket', content: $ticket);
             });
     }
 
@@ -76,11 +76,11 @@ class PrintLabelAction
                     return;
                 }
 
-                $builder = app(ProductLabelZplBuilder::class);
+                $builder = app(ProductLabelEscPosBuilder::class);
                 $copies = (int) $data['copies'];
 
                 try {
-                    $zpl = $withBarcode
+                    $ticket = $withBarcode
                         ->map(fn (Product $product): string => $builder->build($product, $copies))
                         ->implode('');
                 } catch (InvalidArgumentException $exception) {
@@ -93,7 +93,7 @@ class PrintLabelAction
                     return;
                 }
 
-                $livewire->dispatch('print-zpl-label', content: $zpl);
+                $livewire->dispatch('print-escpos-ticket', content: $ticket);
 
                 if ($withoutBarcodeCount > 0) {
                     Notification::make()

@@ -315,16 +315,19 @@ class CrearVenta extends Page
                 ]);
 
                 foreach ($this->cartItems as $item) {
+                    $product = $products[$item['product_id']];
+
                     SaleItem::create([
                         'sale_id'      => $sale->id,
                         'product_id'   => $item['product_id'],
                         'product_name' => $item['name'],
+                        'sku'          => $product->sku,
+                        'barcode'      => $product->barcode,
                         'unit_price'   => $item['unit_price'],
                         'quantity'     => $item['quantity'],
                         'subtotal'     => $item['subtotal'],
                     ]);
 
-                    $product     = $products[$item['product_id']];
                     $stockBefore = $product->stock;
                     $product->decrement('stock', $item['quantity']);
 

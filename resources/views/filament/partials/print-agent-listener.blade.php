@@ -1,15 +1,15 @@
 {{--
     Puente entre Livewire y el Print Agent local (127.0.0.1:58432).
-    Laravel corre en la nube y no puede llamar al agente directamente: el ZPL
-    se genera server-side y se manda al navegador vía evento Livewire; el
-    navegador (que sí corre en la PC del cliente) hace el fetch al agente.
+    Laravel corre en la nube y no puede llamar al agente directamente: el
+    ESC/POS se genera server-side y se manda al navegador vía evento
+    Livewire; el navegador (que sí corre en la PC del cliente) hace el
+    fetch al agente. Tickets de venta y etiquetas de producto usan el mismo
+    evento y la misma impresora de tickets — no hay impresora Zebra/ZPL en
+    este proyecto.
 --}}
 @once
     <script>
         document.addEventListener('livewire:init', () => {
-            Livewire.on('print-zpl-label', ({ content }) => {
-                window.printZplLabel(content);
-            });
             Livewire.on('print-escpos-ticket', ({ content }) => {
                 window.printEscposTicket(content);
             });
@@ -39,10 +39,6 @@
             } catch (e) {
                 return null;
             }
-        };
-
-        window.resolveLabelPrinter = async function (agentUrl) {
-            return window.resolvePrinterByType(agentUrl, 'label', 'zebra_printer_name');
         };
 
         window.resolveTicketPrinter = async function (agentUrl) {
@@ -79,7 +75,7 @@
         };
 
         window.sendToPrintAgent = async function ({ endpoint, resolvePrinter, content, notFoundTitle, notFoundBody, successTitle }) {
-            const agentUrl = localStorage.getItem('zebra_print_agent_url') || 'http://127.0.0.1:58432';
+            const agentUrl = localStorage.getItem('print_agent_url') || 'http://127.0.0.1:58432';
             const printer = await resolvePrinter(agentUrl);
 
             if (!printer) {
@@ -132,25 +128,14 @@
             }
         };
 
-        window.printZplLabel = async function (content) {
-            window.sendToPrintAgent({
-                endpoint: '/print/label',
-                resolvePrinter: window.resolveLabelPrinter,
-                content,
-                notFoundTitle: 'No se detectó ninguna impresora de etiquetas',
-                notFoundBody: 'Conectá la impresora Zebra, o elegila a mano con la acción "Configurar impresora".',
-                successTitle: 'Etiqueta enviada a la impresora',
-            });
-        };
-
         window.printEscposTicket = async function (content) {
             window.sendToPrintAgent({
                 endpoint: '/print/ticket',
                 resolvePrinter: window.resolveTicketPrinter,
                 content,
                 notFoundTitle: 'No se detectó ninguna impresora de tickets',
-                notFoundBody: 'Conectá la impresora de tickets, o elegila a mano con la acción "Configurar impresora".',
-                successTitle: 'Ticket enviado a la impresora',
+                notFoundBody: 'Conectá la impresora de tickets a esta PC y asegurate de que el Print Agent esté corriendo.',
+                successTitle: 'Enviado a la impresora',
             });
         };
     </script>
