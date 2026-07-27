@@ -196,8 +196,10 @@ class ProcessImportFile implements ShouldQueue
         foreach ($spreadsheet->getAllSheets() as $sheet) {
             $lines[] = "--- Hoja: {$sheet->getTitle()} ---";
 
-            foreach ($sheet->toArray(null, true, true, false) as $row) {
-                $row = array_map(fn ($cell) => trim((string) $cell), $row);
+            // formatData=false evita fallar con imágenes embebidas (Drawing) u otros
+            // objetos no convertibles a string (p. ej. logos en celdas).
+            foreach ($sheet->toArray(null, true, false, false) as $row) {
+                $row = array_map(fn ($cell) => $this->cellToPlainText($cell), $row);
 
                 if (implode('', $row) === '') {
                     continue;
@@ -208,6 +210,28 @@ class ProcessImportFile implements ShouldQueue
         }
 
         return implode("\n", $lines);
+    }
+
+    private function cellToPlainText(mixed $cell): string
+    {
+        if ($cell === null || is_bool($cell)) {
+            return '';
+        }
+
+        if (is_scalar($cell)) {
+            return trim((string) $cell);
+        }
+
+        if ($cell instanceof \Stringable) {
+            return trim((string) $cell);
+        }
+
+        if ($cell instanceof \PhpOffice\PhpSpreadsheet\RichText\RichText) {
+            return trim($cell->getPlainText());
+        }
+
+        // Imágenes, dibujos y demás objetos no aportan texto útil a la IA.
+        return '';
     }
 
     // ══════════════════════════════════════════════════════════════════════
