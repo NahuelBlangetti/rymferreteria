@@ -3,6 +3,7 @@
 namespace App\Services\Labels;
 
 use App\Models\Product;
+use App\Support\ProductBarcode;
 use InvalidArgumentException;
 
 class ProductLabelEscPosBuilder
@@ -29,12 +30,16 @@ class ProductLabelEscPosBuilder
      * baratos (soportado desde el comando "GS k" original, sin necesitar
      * la variante extendida que algunos firmwares no implementan).
      */
-    private const CODE39_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%';
+    private const CODE39_CHARS = ProductBarcode::ALLOWED_CHARS;
 
     public function build(Product $product, int $copies = 1): string
     {
         if (blank($product->barcode)) {
             throw new InvalidArgumentException("El producto \"{$product->name}\" no tiene código de barras asignado.");
+        }
+
+        if ($error = ProductBarcode::errorMessage($product->barcode, $product->id)) {
+            throw new InvalidArgumentException("\"{$product->name}\": {$error}");
         }
 
         $copies = max(1, $copies);
@@ -109,21 +114,13 @@ class ProductLabelEscPosBuilder
      */
     private function sanitizeCode(string $code): string
     {
-        $code = strtoupper($this->sanitizeText($code));
-        $filtered = '';
+        $normalized = ProductBarcode::normalize($code);
 
-        for ($i = 0; $i < mb_strlen($code); $i++) {
-            $char = mb_substr($code, $i, 1);
-            if (str_contains(self::CODE39_CHARS, $char)) {
-                $filtered .= $char;
-            }
+        if ($normalized === null) {
+            throw new InvalidArgumentException('El código de barras no tiene caracteres válidos para CODE39.');
         }
 
-        if ($filtered === '') {
-            throw new InvalidArgumentException("El código de barras no tiene caracteres válidos para CODE39.");
-        }
-
-        return $filtered;
+        return $normalized;
     }
 
     private function sanitizeText(string $text): string

@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Products\Actions;
 
 use App\Models\Product;
 use App\Services\Labels\ProductLabelEscPosBuilder;
+use App\Support\ProductBarcode;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Forms\Components\TextInput;
@@ -38,7 +39,27 @@ class PrintLabelAction
                     ->required(),
             ])
             ->action(function (Product $record, array $data, HasTable $livewire): void {
-                $ticket = app(ProductLabelEscPosBuilder::class)->build($record, (int) $data['copies']);
+                if ($error = ProductBarcode::errorMessage($record->barcode, $record->id)) {
+                    Notification::make()
+                        ->title('No se puede imprimir: código inválido')
+                        ->body($error . ' Corregilo con “Asignar código” antes de imprimir.')
+                        ->danger()
+                        ->send();
+
+                    return;
+                }
+
+                try {
+                    $ticket = app(ProductLabelEscPosBuilder::class)->build($record, (int) $data['copies']);
+                } catch (InvalidArgumentException $exception) {
+                    Notification::make()
+                        ->title('No se pudo generar la etiqueta')
+                        ->body($exception->getMessage())
+                        ->danger()
+                        ->send();
+
+                    return;
+                }
 
                 $livewire->dispatch('print-escpos-ticket', content: $ticket);
             });
@@ -66,10 +87,18 @@ class PrintLabelAction
             ->action(function (Collection $records, array $data, HasTable $livewire): void {
                 $withBarcode = $records->filter(fn (Product $product): bool => filled($product->barcode));
                 $withoutBarcodeCount = $records->count() - $withBarcode->count();
+                $invalid = $withBarcode->filter(
+                    fn (Product $product): bool => ProductBarcode::errorMessage($product->barcode, $product->id) !== null
+                );
+                $printable = $withBarcode->reject(
+                    fn (Product $product): bool => ProductBarcode::errorMessage($product->barcode, $product->id) !== null
+                );
 
-                if ($withBarcode->isEmpty()) {
+                if ($printable->isEmpty()) {
                     Notification::make()
-                        ->title('Ningún producto seleccionado tiene código de barras')
+                        ->title($invalid->isNotEmpty()
+                            ? 'Ningún producto tiene un código de barras válido para imprimir'
+                            : 'Ningún producto seleccionado tiene código de barras')
                         ->warning()
                         ->send();
 
@@ -80,7 +109,7 @@ class PrintLabelAction
                 $copies = (int) $data['copies'];
 
                 try {
-                    $ticket = $withBarcode
+                    $ticket = $printable
                         ->map(fn (Product $product): string => $builder->build($product, $copies))
                         ->implode('');
                 } catch (InvalidArgumentException $exception) {
@@ -95,9 +124,17 @@ class PrintLabelAction
 
                 $livewire->dispatch('print-escpos-ticket', content: $ticket);
 
+                $warnings = [];
                 if ($withoutBarcodeCount > 0) {
+                    $warnings[] = "{$withoutBarcodeCount} sin código";
+                }
+                if ($invalid->isNotEmpty()) {
+                    $warnings[] = "{$invalid->count()} con código inválido";
+                }
+
+                if ($warnings !== []) {
                     Notification::make()
-                        ->title("Se omitieron {$withoutBarcodeCount} producto(s) sin código de barras")
+                        ->title('Se omitieron productos: ' . implode(' · ', $warnings))
                         ->warning()
                         ->send();
                 }

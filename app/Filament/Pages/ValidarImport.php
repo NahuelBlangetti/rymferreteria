@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\Category;
 use App\Models\ProductImport;
 use App\Models\Supplier;
+use App\Support\ProductBarcode;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -137,6 +138,7 @@ class ValidarImport extends Page
 
         $toInsert = [];
         $toUpdate = [];
+        $invalidBarcodes = 0;
 
         foreach ($rows as $row) {
             if (trim($row['name'] ?? '') === '') {
@@ -145,13 +147,22 @@ class ValidarImport extends Page
 
             $cost = (float) $row['cost_price'];
             $sale = (float) $row['sale_price'];
+            $barcode = ProductBarcode::normalize($row['barcode'] ?? null);
+            $ignoreId = (($row['action'] ?? 'create') === 'update' && ! empty($row['existing_product_id']))
+                ? (int) $row['existing_product_id']
+                : null;
+
+            if ($barcode !== null && ProductBarcode::errorMessage($barcode, $ignoreId) !== null) {
+                $barcode = null;
+                $invalidBarcodes++;
+            }
 
             $data = [
                 'category_id'       => $row['category_id'] ?: null,
                 'supplier_id'       => $supplierId,
                 'name'              => $row['name'],
                 'sku'               => $row['sku'] ?: null,
-                'barcode'           => $row['barcode'] ?: null,
+                'barcode'           => $barcode,
                 'unit'              => $this->normalizeUnit($row['unit'] ?? null),
                 'cost_price'        => $cost,
                 'sale_price'        => $sale,
@@ -207,6 +218,9 @@ class ValidarImport extends Page
 
         Notification::make()
             ->title('Productos: ' . implode(' · ', $parts))
+            ->body($invalidBarcodes > 0
+                ? "Se omitieron {$invalidBarcodes} código(s) de barras inválido(s). Podés asignarlos después escaneando el producto."
+                : null)
             ->success()
             ->send();
 

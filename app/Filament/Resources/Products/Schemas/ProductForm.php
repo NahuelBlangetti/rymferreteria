@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Products\Schemas;
 
+use App\Support\ProductBarcode;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -26,7 +27,9 @@ class ProductForm
                             ->label('Código de barras')
                             ->placeholder('Apuntá el escáner al producto y escaneá...')
                             ->autofocus()
-                            ->maxLength(100)
+                            ->maxLength(ProductBarcode::MAX_LENGTH)
+                            ->dehydrateStateUsing(fn (?string $state): ?string => ProductBarcode::normalize($state))
+                            ->rule(fn (?\Illuminate\Database\Eloquent\Model $record): ProductBarcode => new ProductBarcode($record?->getKey()))
                             ->columnSpanFull(),
                     ]),
 

@@ -5,9 +5,11 @@ namespace App\Filament\Resources\Products\Tables;
 use App\Filament\Resources\Products\Actions\AdjustProductPricesAction;
 use App\Filament\Resources\Products\Actions\ExportProductsPdfAction;
 use App\Filament\Resources\Products\Actions\PrintLabelAction;
+use App\Support\ProductBarcode;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Enums\FiltersLayout;
@@ -141,11 +143,31 @@ class ProductsTable
                             ->label('Código de barras')
                             ->placeholder('Apuntá el escáner y escaneá...')
                             ->autofocus()
-                            ->maxLength(100),
+                            ->maxLength(ProductBarcode::MAX_LENGTH)
+                            ->dehydrateStateUsing(fn (?string $state): ?string => ProductBarcode::normalize($state))
+                            ->rule(fn ($record): ProductBarcode => new ProductBarcode($record?->getKey())),
                     ])
                     ->fillForm(fn ($record): array => ['barcode' => $record->barcode])
-                    ->action(fn ($record, array $data) => $record->update(['barcode' => $data['barcode'] ?: null]))
-                    ->successNotificationTitle('Código asignado correctamente'),
+                    ->action(function ($record, array $data): void {
+                        $barcode = ProductBarcode::normalize($data['barcode'] ?? null);
+
+                        if ($error = ProductBarcode::errorMessage($barcode, $record->id)) {
+                            Notification::make()
+                                ->title('Código inválido')
+                                ->body($error)
+                                ->danger()
+                                ->send();
+
+                            return;
+                        }
+
+                        $record->update(['barcode' => $barcode]);
+
+                        Notification::make()
+                            ->title('Código asignado correctamente')
+                            ->success()
+                            ->send();
+                    }),
                 PrintLabelAction::make(),
                 EditAction::make()
                     ->modal()

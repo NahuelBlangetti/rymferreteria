@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductImport;
 use App\Models\Supplier;
+use App\Support\ProductBarcode;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -118,13 +119,30 @@ class CargarProductos extends Page
 
     public function scanBarcode(): void
     {
-        $code = trim($this->barcodeInput);
+        $code = ProductBarcode::normalize($this->barcodeInput);
 
-        if (empty($code)) {
+        if ($code === null) {
             return;
         }
 
-        $existing = Product::where('barcode', $code)->orWhere('sku', $code)->first();
+        if ($error = ProductBarcode::errorMessage($code)) {
+            Notification::make()
+                ->title('Código inválido')
+                ->body($error)
+                ->danger()
+                ->send();
+
+            $this->barcodeInput = '';
+            $this->dispatch('focus-barcode');
+
+            return;
+        }
+
+        $this->barcodeInput = $code;
+
+        $existing = Product::whereRaw('UPPER(barcode) = ?', [$code])
+            ->orWhereRaw('UPPER(sku) = ?', [$code])
+            ->first();
 
         if ($existing) {
             Notification::make()
@@ -184,11 +202,23 @@ class CargarProductos extends Page
             return;
         }
 
-        $barcode = trim($this->barcodeInput);
-        $stock   = max(0, (int) str_replace(',', '.', $this->stockInput));
+        $barcode = ProductBarcode::normalize($this->barcodeInput);
+
+        if ($error = ProductBarcode::errorMessage($barcode)) {
+            Notification::make()
+                ->title('Código inválido')
+                ->body($error)
+                ->danger()
+                ->send();
+            $this->dispatch('focus-barcode');
+
+            return;
+        }
+
+        $stock = max(0, (int) str_replace(',', '.', $this->stockInput));
 
         $product = Product::create([
-            'barcode'    => $barcode !== '' ? $barcode : null,
+            'barcode'    => $barcode,
             'name'       => $name,
             'sale_price' => $price,
             'cost_price' => 0,
