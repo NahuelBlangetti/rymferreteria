@@ -16,6 +16,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -53,7 +54,18 @@ class ProcessImportFile implements ShouldQueue
 
     public function handle(): void
     {
-        $import = ProductImport::findOrFail($this->importId);
+        $startedAt = microtime(true);
+        $import    = ProductImport::findOrFail($this->importId);
+
+        $this->logInfo('Job started', [
+            'status'      => $import->status,
+            'filename'    => $import->filename,
+            'file_path'   => $import->file_path,
+            'user_id'     => $import->user_id,
+            'supplier_id' => $import->supplier_id,
+            'diagnostics' => $this->serverDiagnostics($import),
+        ]);
+
         $import->update(['status' => 'processing']);
 
         try {
@@ -61,10 +73,34 @@ class ProcessImportFile implements ShouldQueue
 
             $fullPath  = Storage::disk('local')->path($import->file_path);
             $extension = strtolower(pathinfo($import->filename, PATHINFO_EXTENSION));
+            $fileExists = is_file($fullPath);
+            $fileSize   = $fileExists ? filesize($fullPath) : null;
 
+            $this->logInfo('Preparing file extraction', [
+                'full_path'  => $fullPath,
+                'extension'  => $extension,
+                'exists'     => $fileExists,
+                'size_bytes' => $fileSize,
+                'readable'   => $fileExists ? is_readable($fullPath) : false,
+            ]);
+
+            if (! $fileExists) {
+                throw new \RuntimeException("El archivo no existe en el servidor: {$import->file_path}");
+            }
+
+            $extractStarted = microtime(true);
             $text = $extension === 'pdf'
                 ? $this->extractTextFromPdf($fullPath)
                 : $this->extractTextFromSpreadsheet($fullPath);
+
+            $this->logInfo('Text extracted', [
+                'extension'     => $extension,
+                'chars'         => mb_strlen($text),
+                'lines'         => substr_count($text, "\n") + 1,
+                'duration_ms'   => (int) ((microtime(true) - $extractStarted) * 1000),
+                'memory_peak_mb'=> round(memory_get_peak_usage(true) / 1024 / 1024, 1),
+                'preview'       => Str::limit(preg_replace('/\s+/', ' ', $text) ?? '', 180),
+            ]);
 
             if (trim($text) === '') {
                 throw new \RuntimeException('No se pudo extraer texto del archivo. ¿Es un PDF escaneado (imagen) o una planilla vacía?');
@@ -73,12 +109,37 @@ class ProcessImportFile implements ShouldQueue
             $text   = $this->filterText($text);
             $chunks = $this->chunkText($text);
 
+            $this->logInfo('Text prepared for OpenAI', [
+                'chars_after_filter' => mb_strlen($text),
+                'chunks'             => count($chunks),
+                'chunk_sizes'        => array_map(fn (string $chunk) => mb_strlen($chunk), $chunks),
+                'openai_model'       => config('services.openai.model'),
+                'openai_key_set'     => filled(config('services.openai.key')),
+            ]);
+
             $allExtracted = [];
             foreach ($chunks as $i => $chunk) {
-                $context      = count($chunks) > 1
+                $context = count($chunks) > 1
                     ? "{$import->filename} (parte " . ($i + 1) . ' de ' . count($chunks) . ')'
                     : $import->filename;
-                $allExtracted = array_merge($allExtracted, $this->callOpenAiApi($chunk, $context));
+
+                $this->logInfo('Calling OpenAI', [
+                    'chunk'       => $i + 1,
+                    'chunks_total'=> count($chunks),
+                    'chunk_chars' => mb_strlen($chunk),
+                    'context'     => $context,
+                ]);
+
+                $chunkStarted = microtime(true);
+                $chunkProducts = $this->callOpenAiApi($chunk, $context);
+                $allExtracted = array_merge($allExtracted, $chunkProducts);
+
+                $this->logInfo('OpenAI chunk completed', [
+                    'chunk'         => $i + 1,
+                    'products'      => count($chunkProducts),
+                    'duration_ms'   => (int) ((microtime(true) - $chunkStarted) * 1000),
+                    'memory_peak_mb'=> round(memory_get_peak_usage(true) / 1024 / 1024, 1),
+                ]);
             }
 
             $products = $this->detectDuplicates($this->mapToCategories($allExtracted));
@@ -89,6 +150,12 @@ class ProcessImportFile implements ShouldQueue
                 'products'      => $products,
                 'product_count' => $count,
                 'processed_at'  => now(),
+            ]);
+
+            $this->logInfo('Import completed', [
+                'product_count' => $count,
+                'duration_ms'   => (int) ((microtime(true) - $startedAt) * 1000),
+                'memory_peak_mb'=> round(memory_get_peak_usage(true) / 1024 / 1024, 1),
             ]);
 
             Notification::make()
@@ -114,12 +181,19 @@ class ProcessImportFile implements ShouldQueue
         } finally {
             if (Storage::disk('local')->exists($import->file_path)) {
                 Storage::disk('local')->delete($import->file_path);
+                $this->logInfo('Temporary import file deleted', [
+                    'file_path' => $import->file_path,
+                ]);
             }
         }
     }
 
     public function failed(\Throwable $exception): void
     {
+        $this->logError('Job failed() callback', $exception, [
+            'import_id' => $this->importId,
+        ]);
+
         $import = ProductImport::with('user')->find($this->importId);
 
         if (! $import) {
@@ -141,6 +215,18 @@ class ProcessImportFile implements ShouldQueue
             ? 'El procesamiento tardó demasiado o el servidor se quedó sin memoria. Probá con un archivo más chico.'
             : $e->getMessage();
 
+        $diagnostics = $this->serverDiagnostics($import);
+
+        $this->logError('Import failed', $e, [
+            'import_id'    => $import->id,
+            'filename'     => $import->filename,
+            'file_path'    => $import->file_path,
+            'status'       => $import->status,
+            'user_id'      => $import->user_id,
+            'message'      => $message,
+            'diagnostics'  => $diagnostics,
+        ]);
+
         $import->update([
             'status'        => 'error',
             'error_message' => $message,
@@ -150,12 +236,17 @@ class ProcessImportFile implements ShouldQueue
             (new DiscordNotifier())->notify(
                 '❌ Error al procesar importación',
                 sprintf(
-                    "**Archivo:** %s\n**Usuario:** %s\n**Error:** %s\n**Línea:** %s:%d",
+                    "**Archivo:** %s\n**Usuario:** %s\n**Error:** %s\n**Clase:** %s\n**Línea:** %s:%d\n**Cola:** %s\n**Memoria peak:** %s MB\n**OpenAI key:** %s\n**pdftotext:** %s",
                     $import->filename,
                     $import->user->email ?? "ID {$import->user_id}",
                     $message,
+                    $e::class,
                     basename($e->getFile()),
-                    $e->getLine()
+                    $e->getLine(),
+                    $diagnostics['queue'] ?? 'n/a',
+                    $diagnostics['memory_peak_mb'] ?? 'n/a',
+                    ($diagnostics['openai_key_set'] ?? false) ? 'sí' : 'no',
+                    ($diagnostics['pdftotext_available'] ?? false) ? 'sí' : 'no'
                 ),
                 0xED4245
             );
@@ -171,17 +262,76 @@ class ProcessImportFile implements ShouldQueue
         }
     }
 
+    private function logInfo(string $message, array $context = []): void
+    {
+        Log::channel('imports')->info($message, array_merge([
+            'import_id' => $this->importId,
+        ], $context));
+    }
+
+    private function logError(string $message, \Throwable $e, array $context = []): void
+    {
+        Log::channel('imports')->error($message, array_merge([
+            'import_id' => $this->importId,
+            'exception' => $e::class,
+            'error'     => $e->getMessage(),
+            'file'      => $e->getFile() . ':' . $e->getLine(),
+            'trace'     => collect(explode("\n", $e->getTraceAsString()))->take(12)->all(),
+        ], $context));
+    }
+
+    private function serverDiagnostics(ProductImport $import): array
+    {
+        $fullPath = $import->file_path
+            ? Storage::disk('local')->path($import->file_path)
+            : null;
+
+        return [
+            'app_env'              => config('app.env'),
+            'queue'                => config('queue.default'),
+            'php_version'          => PHP_VERSION,
+            'memory_limit'         => ini_get('memory_limit'),
+            'memory_usage_mb'      => round(memory_get_usage(true) / 1024 / 1024, 1),
+            'memory_peak_mb'       => round(memory_get_peak_usage(true) / 1024 / 1024, 1),
+            'max_execution_time'   => ini_get('max_execution_time'),
+            'openai_model'         => config('services.openai.model'),
+            'openai_key_set'       => filled(config('services.openai.key')),
+            'pdftotext_available'  => $this->commandExists('pdftotext'),
+            'file_exists'          => $fullPath ? is_file($fullPath) : false,
+            'file_size_bytes'      => ($fullPath && is_file($fullPath)) ? filesize($fullPath) : null,
+            'disk_free_mb'         => $fullPath ? @round(disk_free_space(dirname($fullPath)) / 1024 / 1024, 1) : null,
+        ];
+    }
+
+    private function commandExists(string $command): bool
+    {
+        $process = Process::fromShellCommandline('command -v ' . escapeshellarg($command));
+        $process->run();
+
+        return $process->isSuccessful() && trim($process->getOutput()) !== '';
+    }
+
     // ══════════════════════════════════════════════════════════════════════
     // Extracción de texto
     // ══════════════════════════════════════════════════════════════════════
 
     private function extractTextFromPdf(string $path): string
     {
+        if (! $this->commandExists('pdftotext')) {
+            throw new \RuntimeException('El servidor no tiene instalado pdftotext (poppler-utils). No se pueden leer PDFs.');
+        }
+
         $process = new Process(['pdftotext', '-layout', $path, '-']);
         $process->setTimeout(30);
         $process->run();
 
         if (! $process->isSuccessful()) {
+            $this->logError('pdftotext failed', new \RuntimeException(trim($process->getErrorOutput()) ?: 'unknown'), [
+                'exit_code' => $process->getExitCode(),
+                'stderr'    => Str::limit($process->getErrorOutput(), 500),
+                'stdout'    => Str::limit($process->getOutput(), 200),
+            ]);
+
             throw new \RuntimeException('No se pudo leer el PDF: ' . $process->getErrorOutput());
         }
 
@@ -190,22 +340,43 @@ class ProcessImportFile implements ShouldQueue
 
     private function extractTextFromSpreadsheet(string $path): string
     {
-        $spreadsheet = IOFactory::load($path);
-        $lines       = [];
+        try {
+            $spreadsheet = IOFactory::load($path);
+        } catch (\Throwable $e) {
+            $this->logError('PhpSpreadsheet load failed', $e, [
+                'path' => $path,
+            ]);
+
+            throw new \RuntimeException('No se pudo abrir la planilla Excel: ' . $e->getMessage(), 0, $e);
+        }
+
+        $lines = [];
 
         foreach ($spreadsheet->getAllSheets() as $sheet) {
             $lines[] = "--- Hoja: {$sheet->getTitle()} ---";
 
             // formatData=false evita fallar con imágenes embebidas (Drawing) u otros
             // objetos no convertibles a string (p. ej. logos en celdas).
-            foreach ($sheet->toArray(null, true, false, false) as $row) {
-                $row = array_map(fn ($cell) => $this->cellToPlainText($cell), $row);
+            try {
+                foreach ($sheet->toArray(null, true, false, false) as $row) {
+                    $row = array_map(fn ($cell) => $this->cellToPlainText($cell), $row);
 
-                if (implode('', $row) === '') {
-                    continue;
+                    if (implode('', $row) === '') {
+                        continue;
+                    }
+
+                    $lines[] = implode(' | ', $row);
                 }
+            } catch (\Throwable $e) {
+                $this->logError('PhpSpreadsheet toArray failed', $e, [
+                    'sheet' => $sheet->getTitle(),
+                ]);
 
-                $lines[] = implode(' | ', $row);
+                throw new \RuntimeException(
+                    "No se pudo leer la hoja \"{$sheet->getTitle()}\": {$e->getMessage()}",
+                    0,
+                    $e
+                );
             }
         }
 
@@ -287,6 +458,18 @@ class ProcessImportFile implements ShouldQueue
         if ($response->failed()) {
             $status = $response->status();
             $body   = $response->json('error.message') ?? $response->body();
+
+            $this->logError(
+                'OpenAI API request failed',
+                new \RuntimeException((string) $body),
+                [
+                    'context'       => $context,
+                    'http_status'   => $status,
+                    'response_body' => Str::limit((string) $body, 500),
+                    'model'         => config('services.openai.model'),
+                ]
+            );
+
             throw new \RuntimeException("Error en la API de OpenAI ({$status}): " . Str::limit($body, 300));
         }
 

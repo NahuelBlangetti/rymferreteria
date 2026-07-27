@@ -13,6 +13,7 @@ use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Livewire\WithFileUploads;
@@ -427,6 +428,15 @@ class CargarProductos extends Page
         $originalName = $this->importFile->getClientOriginalName();
         $extension    = strtolower($this->importFile->getClientOriginalExtension());
 
+        Log::channel('imports')->info('Import upload started', [
+            'filename'    => $originalName,
+            'extension'   => $extension,
+            'user_id'     => auth()->id(),
+            'supplier_id' => $this->importSupplierId,
+            'queue'       => config('queue.default'),
+            'memory_mb'   => round(memory_get_usage(true) / 1024 / 1024, 1),
+        ]);
+
         if (! $this->importSupplierId) {
             $matched = $this->guessSupplierFromFilename($originalName);
             if ($matched) {
@@ -459,9 +469,26 @@ class CargarProductos extends Page
 
             ProcessImportFile::dispatch($import->id);
 
+            Log::channel('imports')->info('Import queued', [
+                'import_id' => $import->id,
+                'filename'  => $originalName,
+                'file_path' => $filePath,
+                'file_mb'   => round($fileMb, 2),
+                'file_hash' => $hash,
+                'queue'     => config('queue.default'),
+            ]);
+
             $this->state = 'queued';
 
         } catch (\Throwable $e) {
+            Log::channel('imports')->error('Import upload failed', [
+                'filename'  => $originalName,
+                'user_id'   => auth()->id(),
+                'error'     => $e->getMessage(),
+                'exception' => $e::class,
+                'file'      => basename($e->getFile()) . ':' . $e->getLine(),
+            ]);
+
             $this->state        = 'error';
             $this->errorMessage = $e->getMessage();
         }
