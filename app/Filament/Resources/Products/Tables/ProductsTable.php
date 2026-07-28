@@ -7,6 +7,8 @@ use App\Filament\Resources\Products\Actions\ExportProductsPdfAction;
 use App\Filament\Resources\Products\Actions\PrintLabelAction;
 use App\Support\ProductBarcode;
 use Filament\Actions\Action;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -173,12 +175,14 @@ class ProductsTable
                     ->modal()
                     ->slideOver()
                     ->modalWidth('3xl'),
+                DeleteAction::make(),
             ])
             ->toolbarActions([
                 ExportProductsPdfAction::bulk('price_list'),
                 ExportProductsPdfAction::bulk('inventory'),
                 AdjustProductPricesAction::bulk(),
                 PrintLabelAction::bulk(),
+                DeleteBulkAction::make(),
             ]);
     }
 }

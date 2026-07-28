@@ -425,7 +425,6 @@ class ProcessImportFile implements ShouldQueue
               "unit": "unidad de venta, tiene que ser EXACTAMENTE uno de estos valores: unidad, metro, m2, kg, g, litro, caja, rollo, par, docena. Elegí el más parecido a lo que figura en el texto, 'unidad' si no hay forma de saberlo",
               "cost_price": numero con el precio de costo (sin simbolos ni separadores de miles, punto como decimal),
               "sale_price": numero con el precio de venta sugerido si figura, 0 si no figura,
-              "stock": numero con la cantidad en stock si figura, 0 si no figura,
               "category": "rubro o categoría a la que pertenece según cómo esté organizada la lista, o null"
             }
           ]
@@ -435,6 +434,8 @@ class ProcessImportFile implements ShouldQueue
         - No inventes productos que no estén en el texto.
         - Ignorá encabezados, totales, pies de página y líneas que no sean productos.
         - Los números deben ser numéricos, sin "$" ni separadores de miles.
+        - NUNCA extraigas stock, cantidad, bulto, presentación ni unidades por caja. Esas columnas NO son stock del local: ignorálas por completo.
+        - Si en el nombre aparece algo como "x 12", "caja x 24" o "1 lt", eso forma parte del nombre del producto, no es stock.
         PROMPT;
 
         $payload = [
@@ -584,7 +585,7 @@ class ProcessImportFile implements ShouldQueue
                 'unit'                => $this->normalizeUnit($item['unit'] ?? null),
                 'cost_price'          => (float) ($item['cost_price'] ?? 0),
                 'sale_price'          => (float) ($item['sale_price'] ?? 0),
-                'stock'               => (int) ($item['stock'] ?? 0),
+                'stock'               => 0,
                 'min_stock'           => 0,
                 'category_raw'        => $categoryName,
                 'category_id'         => $categoryId,
