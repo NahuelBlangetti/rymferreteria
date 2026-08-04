@@ -420,7 +420,6 @@ class ProcessImportFile implements ShouldQueue
           "products": [
             {
               "name": "nombre del producto",
-              "sku": "código o SKU del proveedor, o null si no figura",
               "barcode": "código de barras, o null si no figura",
               "unit": "unidad de venta, tiene que ser EXACTAMENTE uno de estos valores: unidad, metro, m2, kg, g, litro, caja, rollo, par, docena. Elegí el más parecido a lo que figura en el texto, 'unidad' si no hay forma de saberlo",
               "cost_price": numero con el precio de costo (sin simbolos ni separadores de miles, punto como decimal),
@@ -434,6 +433,7 @@ class ProcessImportFile implements ShouldQueue
         - No inventes productos que no estén en el texto.
         - Ignorá encabezados, totales, pies de página y líneas que no sean productos.
         - Los números deben ser numéricos, sin "$" ni separadores de miles.
+        - NUNCA extraigas SKU, código de proveedor ni códigos internos del proveedor. Esos códigos NO son el código de barras de la ferretería: ignorálos por completo.
         - NUNCA extraigas stock, cantidad, bulto, presentación ni unidades por caja. Esas columnas NO son stock del local: ignorálas por completo.
         - Si en el nombre aparece algo como "x 12", "caja x 24" o "1 lt", eso forma parte del nombre del producto, no es stock.
         PROMPT;
@@ -580,7 +580,6 @@ class ProcessImportFile implements ShouldQueue
                 'selected'            => true,
                 'action'              => 'create',
                 'name'                => $item['name'] ?? '',
-                'sku'                 => $item['sku'] ?? null,
                 'barcode'             => $item['barcode'] ?? null,
                 'unit'                => $this->normalizeUnit($item['unit'] ?? null),
                 'cost_price'          => (float) ($item['cost_price'] ?? 0),
@@ -601,7 +600,7 @@ class ProcessImportFile implements ShouldQueue
     private function detectDuplicates(array $rows): array
     {
         $existingProducts = Product::query()
-            ->select(['id', 'name', 'sku', 'barcode', 'cost_price', 'sale_price'])
+            ->select(['id', 'name', 'barcode', 'cost_price', 'sale_price'])
             ->get();
 
         $existingByKey = $existingProducts->reduce(function (array $carry, Product $product) {

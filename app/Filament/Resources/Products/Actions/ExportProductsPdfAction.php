@@ -14,17 +14,32 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class ExportProductsPdfAction
 {
     private const TYPES = [
+        'barcodes' => [
+            'label'        => 'Códigos de barras',
+            'modalHeading' => 'Exportar códigos de barras',
+            'description'  => 'Listado con nombre del producto y su código de barras.',
+            'pdfTitle'     => 'Códigos de Barras',
+            'view'         => 'pdf.products-barcodes',
+            'orientation'  => 'portrait',
+            'filename'     => 'codigos-barras',
+        ],
         'price_list' => [
             'label'        => 'Lista de precios (Clientes)',
             'modalHeading' => 'Exportar lista de precios para clientes',
             'description'  => 'Para entregar o enviar a clientes. Incluye nombre, código, categoría y precio de venta.',
             'pdfTitle'     => 'Lista de Precios — Clientes',
+            'view'         => 'pdf.products-price-list',
+            'orientation'  => 'portrait',
+            'filename'     => 'lista-precios',
         ],
         'inventory' => [
             'label'        => 'Inventario interno (Proveedores)',
             'modalHeading' => 'Exportar inventario para proveedores',
             'description'  => 'Para compartir con proveedores. Incluye costo, margen, stock y datos del proveedor.',
             'pdfTitle'     => 'Inventario Interno — Proveedores',
+            'view'         => 'pdf.products-inventory',
+            'orientation'  => 'landscape',
+            'filename'     => 'inventario',
         ],
     ];
 
@@ -110,22 +125,16 @@ class ExportProductsPdfAction
 
     public static function download(Collection $products, string $type): StreamedResponse
     {
-        $view = $type === 'inventory'
-            ? 'pdf.products-inventory'
-            : 'pdf.products-price-list';
+        $meta = self::TYPES[$type];
 
-        $orientation = $type === 'inventory' ? 'landscape' : 'portrait';
-
-        $pdf = Pdf::loadView($view, [
+        $pdf = Pdf::loadView($meta['view'], [
             'products' => $products,
             'store'    => config('store'),
-            'pdfTitle' => self::TYPES[$type]['pdfTitle'],
-        ])->setPaper('a4', $orientation);
+            'pdfTitle' => $meta['pdfTitle'],
+        ])->setPaper('a4', $meta['orientation']);
 
         $slug = str(config('store.name'))->slug();
-        $prefix = $type === 'inventory' ? 'inventario' : 'lista-precios';
-
-        $filename = "{$prefix}-{$slug}-" . now()->format('Y-m-d') . '.pdf';
+        $filename = "{$meta['filename']}-{$slug}-" . now()->format('Y-m-d') . '.pdf';
 
         return response()->streamDownload(
             fn () => print($pdf->output()),

@@ -161,7 +161,6 @@ class ValidarImport extends Page
                 'category_id'       => $row['category_id'] ?: null,
                 'supplier_id'       => $supplierId,
                 'name'              => $row['name'],
-                'sku'               => $row['sku'] ?: null,
                 'barcode'           => $barcode,
                 'unit'              => $this->normalizeUnit($row['unit'] ?? null),
                 'cost_price'        => $cost,

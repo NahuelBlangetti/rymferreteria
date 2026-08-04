@@ -86,7 +86,6 @@
                                 <th class="px-4 py-3"></th>
                                 <th class="px-4 py-3">Estado</th>
                                 <th class="px-4 py-3">Nombre</th>
-                                <th class="px-4 py-3">SKU</th>
                                 <th class="px-4 py-3">Código de barras</th>
                                 <th class="px-4 py-3">Unidad</th>
                                 <th class="px-4 py-3">Costo</th>
@@ -148,9 +147,6 @@
 
                                     <td class="min-w-[14rem] px-4 py-2.5">
                                         <input type="text" wire:model="products.{{ $index }}.name" class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm dark:border-white/15 dark:bg-white/5 dark:text-white" />
-                                    </td>
-                                    <td class="min-w-[8rem] px-4 py-2.5">
-                                        <input type="text" wire:model="products.{{ $index }}.sku" class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm dark:border-white/15 dark:bg-white/5 dark:text-white" />
                                     </td>
                                     <td class="min-w-[9rem] px-4 py-2.5">
                                         <input type="text" wire:model="products.{{ $index }}.barcode" class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm dark:border-white/15 dark:bg-white/5 dark:text-white" />

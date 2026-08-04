@@ -178,6 +178,7 @@ class ProductsTable
                 DeleteAction::make(),
             ])
             ->toolbarActions([
+                ExportProductsPdfAction::bulk('barcodes'),
                 ExportProductsPdfAction::bulk('price_list'),
                 ExportProductsPdfAction::bulk('inventory'),
                 AdjustProductPricesAction::bulk(),
