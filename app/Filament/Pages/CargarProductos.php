@@ -108,6 +108,35 @@ class CargarProductos extends Page
             ->toArray();
     }
 
+    public function discardImport(int $importId): void
+    {
+        $import = ProductImport::query()
+            ->where('id', $importId)
+            ->where('user_id', auth()->id())
+            ->where('status', 'done')
+            ->first();
+
+        if (! $import) {
+            Notification::make()
+                ->title('Importación no encontrada')
+                ->warning()
+                ->send();
+
+            $this->loadPendingImports();
+
+            return;
+        }
+
+        $import->cancel();
+        $this->loadPendingImports();
+
+        Notification::make()
+            ->title('Importación eliminada')
+            ->body('No se guardó ningún producto del archivo.')
+            ->success()
+            ->send();
+    }
+
     public function switchTab(string $tab): void
     {
         $this->tab = $tab;

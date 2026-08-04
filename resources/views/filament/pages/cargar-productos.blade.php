@@ -34,13 +34,27 @@
                                 · {{ \Carbon\Carbon::parse($pi['processed_at'])->diffForHumans() }}
                             </p>
                         </div>
-                        <a
-                            href="{{ \App\Filament\Pages\ValidarImport::getUrl(['id' => $pi['id']]) }}"
-                            class="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-warning-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-warning-400 focus:outline-none focus:ring-2 focus:ring-warning-400/50"
-                        >
-                            <x-filament::icon icon="heroicon-o-check-circle" class="h-4 w-4" />
-                            Validar ahora
-                        </a>
+                        <div class="flex shrink-0 items-center gap-2">
+                            <button
+                                type="button"
+                                wire:click="discardImport({{ $pi['id'] }})"
+                                wire:confirm="¿Eliminar esta importación? No se guardará ningún producto del archivo."
+                                wire:loading.attr="disabled"
+                                wire:target="discardImport({{ $pi['id'] }})"
+                                title="Eliminar importación"
+                                class="inline-flex items-center justify-center rounded-xl border border-warning-300 bg-white px-3 py-2 text-sm font-medium text-warning-800 shadow-sm transition hover:bg-warning-100 focus:outline-none focus:ring-2 focus:ring-warning-400/50 dark:border-warning-500/30 dark:bg-transparent dark:text-warning-300 dark:hover:bg-warning-500/10"
+                            >
+                                <x-filament::icon icon="heroicon-o-trash" class="h-4 w-4" />
+                                <span class="sr-only">Eliminar</span>
+                            </button>
+                            <a
+                                href="{{ \App\Filament\Pages\ValidarImport::getUrl(['id' => $pi['id']]) }}"
+                                class="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-warning-500 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-warning-400 focus:outline-none focus:ring-2 focus:ring-warning-400/50"
+                            >
+                                <x-filament::icon icon="heroicon-o-check-circle" class="h-4 w-4" />
+                                Validar ahora
+                            </a>
+                        </div>
                     </div>
                 @endforeach
             </div>

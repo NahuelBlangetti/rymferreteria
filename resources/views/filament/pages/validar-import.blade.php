@@ -77,6 +77,15 @@
                     <p class="max-w-md text-sm text-gray-400 dark:text-gray-500">
                         Probá con otro formato o verificá que la lista tenga nombres y precios legibles.
                     </p>
+                    <button
+                        wire:click="cancelImport"
+                        wire:confirm="¿Cancelar esta importación?"
+                        type="button"
+                        class="mt-2 inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 dark:border-white/15 dark:bg-white/5 dark:text-gray-200"
+                    >
+                        <x-filament::icon icon="heroicon-o-x-mark" class="h-4 w-4" />
+                        Cancelar importación
+                    </button>
                 </div>
             @else
                 <div class="carga-archivo-table-wrap overflow-x-auto">
@@ -86,6 +95,7 @@
                                 <th class="px-4 py-3"></th>
                                 <th class="px-4 py-3">Estado</th>
                                 <th class="px-4 py-3">Nombre</th>
+                                <th class="px-4 py-3">SKU proveedor</th>
                                 <th class="px-4 py-3">Código de barras</th>
                                 <th class="px-4 py-3">Unidad</th>
                                 <th class="px-4 py-3">Costo</th>
@@ -148,6 +158,9 @@
                                     <td class="min-w-[14rem] px-4 py-2.5">
                                         <input type="text" wire:model="products.{{ $index }}.name" class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm dark:border-white/15 dark:bg-white/5 dark:text-white" />
                                     </td>
+                                    <td class="min-w-[8rem] px-4 py-2.5">
+                                        <input type="text" wire:model="products.{{ $index }}.sku" class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm dark:border-white/15 dark:bg-white/5 dark:text-white" />
+                                    </td>
                                     <td class="min-w-[9rem] px-4 py-2.5">
                                         <input type="text" wire:model="products.{{ $index }}.barcode" class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm dark:border-white/15 dark:bg-white/5 dark:text-white" />
                                     </td>
@@ -193,26 +206,44 @@
                         <span class="text-warning-600 dark:text-warning-400">{{ $updateCount }} actualizar</span>
                     @endif
                 </div>
-                <button
-                    wire:click="createProducts"
-                    wire:loading.attr="disabled"
-                    wire:target="createProducts"
-                    type="button"
-                    @disabled($totalCount === 0 || $selectedCount === 0)
-                    class="inline-flex items-center gap-2 rounded-xl bg-success-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-success-500 focus:outline-none focus:ring-2 focus:ring-success-500/40 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                    <span wire:loading.remove wire:target="createProducts" class="inline-flex items-center gap-2">
-                        <x-filament::icon icon="heroicon-o-check" class="h-4 w-4" />
-                        Guardar seleccionados
-                    </span>
-                    <span wire:loading wire:target="createProducts" class="inline-flex items-center gap-2">
-                        <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                        </svg>
-                        Guardando…
-                    </span>
-                </button>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button
+                        wire:click="cancelImport"
+                        wire:confirm="¿Cancelar esta importación? No se guardará ningún producto del archivo."
+                        wire:loading.attr="disabled"
+                        wire:target="cancelImport"
+                        type="button"
+                        class="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400/40 dark:border-white/15 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10"
+                    >
+                        <span wire:loading.remove wire:target="cancelImport" class="inline-flex items-center gap-2">
+                            <x-filament::icon icon="heroicon-o-x-mark" class="h-4 w-4" />
+                            Cancelar importación
+                        </span>
+                        <span wire:loading wire:target="cancelImport" class="inline-flex items-center gap-2">
+                            Cancelando…
+                        </span>
+                    </button>
+                    <button
+                        wire:click="createProducts"
+                        wire:loading.attr="disabled"
+                        wire:target="createProducts"
+                        type="button"
+                        @disabled($totalCount === 0 || $selectedCount === 0)
+                        class="inline-flex items-center gap-2 rounded-xl bg-success-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-success-500 focus:outline-none focus:ring-2 focus:ring-success-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <span wire:loading.remove wire:target="createProducts" class="inline-flex items-center gap-2">
+                            <x-filament::icon icon="heroicon-o-check" class="h-4 w-4" />
+                            Guardar seleccionados
+                        </span>
+                        <span wire:loading wire:target="createProducts" class="inline-flex items-center gap-2">
+                            <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                            </svg>
+                            Guardando…
+                        </span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>

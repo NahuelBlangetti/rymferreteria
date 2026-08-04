@@ -19,9 +19,10 @@ class ProductForm
         return $schema
             ->columns(2)
             ->components([
-                Section::make('Código')
-                    ->description('Escaneá el código de barras o escribilo manualmente.')
+                Section::make('Códigos')
+                    ->description('El código de barras es el interno de la ferretería. El SKU es el código del proveedor.')
                     ->columnSpanFull()
+                    ->columns(2)
                     ->schema([
                         TextInput::make('barcode')
                             ->label('Código de barras')
@@ -29,8 +30,12 @@ class ProductForm
                             ->autofocus()
                             ->maxLength(ProductBarcode::MAX_LENGTH)
                             ->dehydrateStateUsing(fn (?string $state): ?string => ProductBarcode::normalize($state))
-                            ->rule(fn (?\Illuminate\Database\Eloquent\Model $record): ProductBarcode => new ProductBarcode($record?->getKey()))
-                            ->columnSpanFull(),
+                            ->rule(fn (?\Illuminate\Database\Eloquent\Model $record): ProductBarcode => new ProductBarcode($record?->getKey())),
+                        TextInput::make('sku')
+                            ->label('SKU del proveedor')
+                            ->placeholder('Código del proveedor')
+                            ->maxLength(255)
+                            ->dehydrateStateUsing(fn (?string $state): ?string => filled($state) ? trim($state) : null),
                     ]),
 
                 Section::make('Información general')

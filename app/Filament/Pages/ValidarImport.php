@@ -161,6 +161,7 @@ class ValidarImport extends Page
                 'category_id'       => $row['category_id'] ?: null,
                 'supplier_id'       => $supplierId,
                 'name'              => $row['name'],
+                'sku'               => filled($row['sku'] ?? null) ? trim((string) $row['sku']) : null,
                 'barcode'           => $barcode,
                 'unit'              => $this->normalizeUnit($row['unit'] ?? null),
                 'cost_price'        => $cost,
@@ -226,10 +227,45 @@ class ValidarImport extends Page
         $this->redirectRoute('filament.admin.pages.cargar-productos');
     }
 
+    public function cancelImport(): void
+    {
+        if (! $this->importId) {
+            return;
+        }
+
+        $import = ProductImport::query()
+            ->where('id', $this->importId)
+            ->where('user_id', auth()->user()?->getAuthIdentifier())
+            ->where('status', 'done')
+            ->first();
+
+        if (! $import) {
+            return;
+        }
+
+        $import->cancel();
+
+        Notification::make()
+            ->title('Importación cancelada')
+            ->body('No se guardó ningún producto.')
+            ->success()
+            ->send();
+
+        $this->redirectRoute('filament.admin.pages.cargar-productos');
+    }
+
     // Elimina la notificación persistente "Revisar y guardar →" de esta importación
     // para que deje de aparecer una vez que ya fue validada (o ya no existe).
     private function dismissImportNotification(int $importId): void
     {
+        $import = ProductImport::find($importId);
+
+        if ($import) {
+            $import->dismissReviewNotifications();
+
+            return;
+        }
+
         $url = self::getUrl(['id' => $importId]);
 
         auth()->user()?->notifications()
