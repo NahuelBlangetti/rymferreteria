@@ -18,8 +18,6 @@ class ProductLabelEscPosBuilder
 
     private const BOLD = 8;
 
-    private const BOLD_TALL = 24;
-
     private const ESC = "\x1B";
 
     private const GS = "\x1D";
@@ -65,7 +63,6 @@ class ProductLabelEscPosBuilder
     private function buildOne(Product $product): string
     {
         $code = $this->sanitizeCode((string) $product->barcode);
-        $price = number_format((float) $product->sale_price, 2, ',', '.');
 
         $label = self::ESC.'@'; // Reset impresora
 
@@ -73,10 +70,6 @@ class ProductLabelEscPosBuilder
         foreach ($this->wrap($this->sanitizeText($product->name)) as $line) {
             $label .= $line."\n";
         }
-        $label .= self::ESC.'!'.chr(0);
-
-        $label .= self::ESC.'!'.chr(self::BOLD_TALL);
-        $label .= $this->centered('$ '.$price);
         $label .= self::ESC.'!'.chr(0);
 
         $label .= "\n";
@@ -165,17 +158,5 @@ class ProductLabelEscPosBuilder
         }
 
         return $lines === [] ? [''] : $lines;
-    }
-
-    private function centered(string $text): string
-    {
-        $out = '';
-
-        foreach ($this->wrap($text) as $line) {
-            $padding = max(0, intdiv(self::WIDTH - mb_strlen($line), 2));
-            $out .= str_repeat(' ', $padding).$line."\n";
-        }
-
-        return $out;
     }
 }
