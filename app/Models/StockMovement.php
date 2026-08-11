@@ -20,6 +20,12 @@ class StockMovement extends Model
         'reference_id',
     ];
 
+    protected $casts = [
+        'quantity'     => 'decimal:3',
+        'stock_before' => 'decimal:3',
+        'stock_after'  => 'decimal:3',
+    ];
+
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);

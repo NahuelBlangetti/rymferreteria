@@ -167,8 +167,8 @@ class ValidarImport extends Page
                 'cost_price'        => $cost,
                 'sale_price'        => $sale,
                 'margin_percentage' => $cost > 0 ? round(($sale / $cost - 1) * 100, 2) : 0,
-                'stock'             => (int) $row['stock'],
-                'min_stock'         => (int) ($row['min_stock'] ?? 0),
+                'stock'             => round((float) str_replace(',', '.', (string) $row['stock']), 3),
+                'min_stock'         => round((float) str_replace(',', '.', (string) ($row['min_stock'] ?? 0)), 3),
                 'active'            => true,
             ];
 

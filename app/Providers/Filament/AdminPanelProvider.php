@@ -2,7 +2,7 @@
 
 namespace App\Providers\Filament;
 
-use App\Filament\Widgets\LatestSales;
+use App\Filament\Widgets\SalesTrend;
 use App\Filament\Widgets\StatsOverview;
 use App\Filament\Widgets\StockAlerts;
 use App\Filament\Widgets\TopProducts;
@@ -57,7 +57,7 @@ class AdminPanelProvider extends PanelProvider
             ->widgets([
                 AccountWidget::class,
                 StatsOverview::class,
-                LatestSales::class,
+                SalesTrend::class,
                 TopProducts::class,
                 StockAlerts::class,
             ])

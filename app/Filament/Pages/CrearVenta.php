@@ -51,7 +51,7 @@ class CrearVenta extends Page
         return collect($this->cartItems)->sum('subtotal');
     }
 
-    public function getCartCount(): int
+    public function getCartCount(): float
     {
         return collect($this->cartItems)->sum('quantity');
     }
@@ -162,6 +162,16 @@ class CrearVenta extends Page
         }
 
         if ($existingIndex !== false) {
+            if ($product->isFractional()) {
+                Notification::make()
+                    ->title("{$product->name} ya está en el carrito")
+                    ->body("Editá la cantidad en {$product->unit} directamente en el carrito.")
+                    ->warning()
+                    ->send();
+
+                return;
+            }
+
             $newQty         = $this->cartItems[$existingIndex]['quantity'] + 1;
             $availableStock = $this->cartItems[$existingIndex]['stock'];
 
@@ -189,13 +199,14 @@ class CrearVenta extends Page
             }
 
             $this->cartItems[] = [
-                'product_id' => $product->id,
-                'name'       => $product->name,
-                'unit'       => $product->unit,
-                'unit_price' => (float) $product->sale_price,
-                'quantity'   => 1,
-                'subtotal'   => (float) $product->sale_price,
-                'stock'      => $product->stock,
+                'product_id'   => $product->id,
+                'name'         => $product->name,
+                'unit'         => $product->unit,
+                'is_fractional' => $product->isFractional(),
+                'unit_price'   => (float) $product->sale_price,
+                'quantity'     => 1,
+                'subtotal'     => (float) $product->sale_price,
+                'stock'        => (float) $product->stock,
             ];
         }
 
@@ -217,7 +228,9 @@ class CrearVenta extends Page
 
     public function updateQuantity(int $index, mixed $quantity): void
     {
-        $qty = (int) $quantity;
+        $isFractional = $this->cartItems[$index]['is_fractional'] ?? false;
+        $qty          = round((float) str_replace(',', '.', (string) $quantity), 3);
+        $qty          = $isFractional ? $qty : (float) (int) $qty;
 
         if ($qty <= 0) {
             $this->removeFromCart($index);

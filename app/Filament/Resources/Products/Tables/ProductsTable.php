@@ -100,13 +100,13 @@ class ProductsTable
                     ->sortable(),
                 TextColumn::make('stock')
                     ->label('Stock')
-                    ->numeric()
+                    ->formatStateUsing(fn ($state): string => rtrim(rtrim(number_format((float) $state, 3, ',', '.'), '0'), ','))
                     ->sortable()
                     ->badge()
-                    ->color(fn (int $state, $record): string => match (true) {
-                        $state <= 0                   => 'danger',
-                        $state <= $record->min_stock => 'warning',
-                        default                       => 'success',
+                    ->color(fn ($state, $record): string => match (true) {
+                        (float) $state <= 0                   => 'danger',
+                        (float) $state <= $record->min_stock => 'warning',
+                        default                                => 'success',
                     }),
             ])
             ->filters([

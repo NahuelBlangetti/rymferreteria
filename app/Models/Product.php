@@ -11,6 +11,12 @@ class Product extends Model
 {
     use SoftDeletes;
 
+    /**
+     * Unidades que se venden fraccionadas (ej. manguera por metro) en vez
+     * de en cantidades enteras.
+     */
+    public const FRACTIONAL_UNITS = ['metro', 'm2', 'kg', 'g', 'litro'];
+
     protected $fillable = [
         'category_id',
         'supplier_id',
@@ -32,8 +38,15 @@ class Product extends Model
         'cost_price'        => 'decimal:2',
         'sale_price'        => 'decimal:2',
         'margin_percentage' => 'decimal:2',
+        'stock'             => 'decimal:3',
+        'min_stock'         => 'decimal:3',
         'active'            => 'boolean',
     ];
+
+    public function isFractional(): bool
+    {
+        return in_array($this->unit, self::FRACTIONAL_UNITS, true);
+    }
 
     public function category(): BelongsTo
     {

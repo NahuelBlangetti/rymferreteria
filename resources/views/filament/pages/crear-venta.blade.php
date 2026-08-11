@@ -106,7 +106,7 @@
                                             {{ $product['name'] }}
                                         </p>
                                         <p class="text-xs text-gray-500 dark:text-gray-400">
-                                            Stock: {{ $product['stock'] }} {{ $product['unit'] }}
+                                            Stock: {{ rtrim(rtrim(number_format((float) $product['stock'], 3, ',', '.'), '0'), ',') }} {{ $product['unit'] }}
                                             @if (! empty($product['sku']))
                                                 · SKU: {{ $product['sku'] }}
                                             @endif
@@ -163,7 +163,7 @@
                             Carrito
                             @if (count($cartItems) > 0)
                                 <span class="ml-1 inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-950/60 dark:text-primary-300">
-                                    {{ $this->getCartCount() }} unid.
+                                    {{ number_format($this->getCartCount(), $this->getCartCount() == (int) $this->getCartCount() ? 0 : 3, ',', '.') }} unid.
                                 </span>
                             @endif
                         </h3>
@@ -201,19 +201,31 @@
                                         </p>
                                     </div>
                                     <div class="flex items-center gap-1.5 shrink-0">
-                                        <button
-                                            wire:click="updateQuantity({{ $index }}, {{ $item['quantity'] - 1 }})"
-                                            type="button"
-                                            class="flex h-6 w-6 items-center justify-center rounded border border-gray-300 bg-gray-50 text-gray-600 transition hover:bg-gray-100 dark:border-white/20 dark:bg-white/5 dark:text-gray-300"
-                                        >−</button>
-                                        <span class="w-7 text-center text-sm font-semibold text-gray-900 dark:text-white">
-                                            {{ $item['quantity'] }}
-                                        </span>
-                                        <button
-                                            wire:click="updateQuantity({{ $index }}, {{ $item['quantity'] + 1 }})"
-                                            type="button"
-                                            class="flex h-6 w-6 items-center justify-center rounded border border-gray-300 bg-gray-50 text-gray-600 transition hover:bg-gray-100 dark:border-white/20 dark:bg-white/5 dark:text-gray-300"
-                                        >+</button>
+                                        @if ($item['is_fractional'] ?? false)
+                                            <input
+                                                type="number"
+                                                step="0.001"
+                                                min="0"
+                                                value="{{ $item['quantity'] }}"
+                                                wire:change="updateQuantity({{ $index }}, $event.target.value)"
+                                                class="fi-input w-20 rounded border border-gray-300 bg-gray-50 px-1.5 py-1 text-center text-sm font-semibold text-gray-900 dark:border-white/20 dark:bg-white/5 dark:text-white"
+                                            />
+                                            <span class="text-xs text-gray-500 dark:text-gray-400">{{ $item['unit'] }}</span>
+                                        @else
+                                            <button
+                                                wire:click="updateQuantity({{ $index }}, {{ $item['quantity'] - 1 }})"
+                                                type="button"
+                                                class="flex h-6 w-6 items-center justify-center rounded border border-gray-300 bg-gray-50 text-gray-600 transition hover:bg-gray-100 dark:border-white/20 dark:bg-white/5 dark:text-gray-300"
+                                            >−</button>
+                                            <span class="w-7 text-center text-sm font-semibold text-gray-900 dark:text-white">
+                                                {{ (int) $item['quantity'] }}
+                                            </span>
+                                            <button
+                                                wire:click="updateQuantity({{ $index }}, {{ $item['quantity'] + 1 }})"
+                                                type="button"
+                                                class="flex h-6 w-6 items-center justify-center rounded border border-gray-300 bg-gray-50 text-gray-600 transition hover:bg-gray-100 dark:border-white/20 dark:bg-white/5 dark:text-gray-300"
+                                            >+</button>
+                                        @endif
                                     </div>
                                     <div class="w-20 text-right shrink-0">
                                         <span class="text-sm font-semibold text-gray-900 dark:text-white">

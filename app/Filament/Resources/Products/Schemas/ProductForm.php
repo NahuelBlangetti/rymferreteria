@@ -145,13 +145,16 @@ class ProductForm
                         TextInput::make('stock')
                             ->label('Stock actual')
                             ->required()
-                            ->integer()
+                            ->numeric()
+                            ->step(0.001)
                             ->default(0)
-                            ->minValue(0),
+                            ->minValue(0)
+                            ->helperText('Para unidades como metro, m², kg, g o litro podés cargar decimales (ej. 12.5).'),
                         TextInput::make('min_stock')
                             ->label('Stock mínimo (punto de pedido)')
                             ->required()
-                            ->integer()
+                            ->numeric()
+                            ->step(0.001)
                             ->default(0)
                             ->minValue(0),
                     ]),
