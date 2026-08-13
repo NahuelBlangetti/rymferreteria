@@ -64,6 +64,10 @@ class SaleTicketEscPosBuilder
         $ticket .= "\n";
         $ticket .= 'Medio de pago: '.(self::PAYMENT_LABELS[$sale->payment_method] ?? $sale->payment_method)."\n";
         $ticket .= "\n";
+        $ticket .= self::ESC.'!'.chr(self::BOLD);
+        $ticket .= $this->centered('Devoluciones dentro de las 24 Horas');
+        $ticket .= self::ESC.'!'.chr(0);
+        $ticket .= "\n";
         $ticket .= $this->centered('¡Gracias por su compra!');
         $ticket .= "\n\n\n";
         $ticket .= self::ESC.'!'.chr(0); // Restablecer tamaño de fuente
@@ -86,24 +90,18 @@ class SaleTicketEscPosBuilder
         $subtotal = $this->formatNumber((float) $item->subtotal);
         $productName = $this->sanitize($item->product_name);
 
-        // El codigo de barra es lo que el cliente realmente usa para
-        // ubicar el producto; el SKU queda como respaldo mientras se
-        // completa la carga de codigos de barra en el catalogo.
-        $code = $item->barcode ?: $item->sku;
-        $codeLine = $code ? '  Cod '.$this->sanitize($code)."\n" : '';
-
         $head = $qty == 1.0
             ? $productName
             : "{$qtyLabel} x {$productName}";
 
         if (mb_strlen($head) + 1 + mb_strlen($subtotal) <= self::WIDTH) {
-            return $this->padRight($head, self::WIDTH - mb_strlen($subtotal)).$subtotal."\n".$codeLine;
+            return $this->padRight($head, self::WIDTH - mb_strlen($subtotal)).$subtotal."\n";
         }
 
         $detail = $qty == 1.0 ? '' : "{$qtyLabel} x {$unitPrice}";
         $detailLine = $this->padRight($detail, self::WIDTH - mb_strlen($subtotal)).$subtotal."\n";
 
-        return implode("\n", $this->wrap($head))."\n".$detailLine.$codeLine;
+        return implode("\n", $this->wrap($head))."\n".$detailLine;
     }
 
     /**
