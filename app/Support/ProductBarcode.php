@@ -20,6 +20,18 @@ class ProductBarcode implements ValidationRule
 
     public const MAX_LENGTH = 20;
 
+    /**
+     * Ancho imprimible de la Inkspire (58 mm / 384 puntos, ver
+     * ProductLabelEscPosBuilder) con el ancho de módulo mínimo usado al
+     * imprimir (GS w = 2). Un CODE39 de más de este largo no entra en el
+     * papel con ninguna relación ancho/angosto habitual (2:1 a 3:1): el
+     * firmware lo recorta o lo descarta sin avisar, así que el código
+     * "se pierde" recién al imprimir, no al guardar. Los numéricos de
+     * 12-13 dígitos no están sujetos a este límite porque se imprimen
+     * como EAN13 nativo (mucho más compacto), no como CODE39.
+     */
+    public const MAX_CODE39_LENGTH = 10;
+
     public function __construct(private readonly ?int $ignoreProductId = null) {}
 
     public static function normalize(?string $value): ?string
@@ -31,6 +43,16 @@ class ProductBarcode implements ValidationRule
         $value = strtoupper(trim($value));
 
         return $value === '' ? null : $value;
+    }
+
+    /**
+     * true si el código se imprime como EAN13 nativo (GS k m=2) en vez de
+     * CODE39: numérico puro de 12 o 13 dígitos, el formato real de los
+     * códigos de fábrica escaneados de un envase.
+     */
+    public static function isEan13(string $code): bool
+    {
+        return ctype_digit($code) && in_array(strlen($code), [12, 13], true);
     }
 
     /**
@@ -67,6 +89,10 @@ class ProductBarcode implements ValidationRule
         // alfanuméricos cortos con dígitos intercalados.
         if (preg_match('/[A-Z]{8,}/', $code)) {
             return 'Ese valor parece un nombre, no un código de barras. Escaneá el código del envase o la etiqueta del proveedor.';
+        }
+
+        if (! self::isEan13($code) && $length > self::MAX_CODE39_LENGTH) {
+            return 'El código de barras es demasiado largo para imprimirse (máximo '.self::MAX_CODE39_LENGTH.' caracteres, salvo que sea un EAN13 de fábrica de 12-13 dígitos numéricos).';
         }
 
         $exists = Product::query()

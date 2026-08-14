@@ -85,8 +85,17 @@ class ProductLabelEscPosBuilder
      * "GS k" formato clásico (m 0-6, datos terminados en NUL): es la
      * variante que más clones ESC/POS baratos implementan, a diferencia
      * del formato extendido (m 65+) que requiere firmware más completo.
-     * m=4 selecciona CODE39. GS h/w fijan alto/ancho de módulo, GS H
-     * habilita el texto legible (HRI) debajo del símbolo.
+     * GS h/w fijan alto/ancho de módulo, GS H habilita el texto legible
+     * (HRI) debajo del símbolo.
+     *
+     * El símbolo se elige según el código: CODE39 (m=4) es mucho menos
+     * denso que EAN13, y un código de fábrica de 12-13 dígitos ya no
+     * entra en el ancho imprimible (58 mm / 384 puntos) codificado como
+     * CODE39 — el firmware lo recorta o descarta sin avisar. Por eso los
+     * numéricos de 12-13 dígitos se imprimen como EAN13 nativo (m=2),
+     * que además es el símbolo correcto para ese dato. Ver
+     * ProductBarcode::isEan13() y ProductBarcode::MAX_CODE39_LENGTH,
+     * que rechaza al guardar cualquier otro código que no vaya a entrar.
      */
     private function barcode(string $code): string
     {
@@ -94,7 +103,9 @@ class ProductLabelEscPosBuilder
         $out .= self::GS.'w'.chr(2); // ancho de modulo: 2 (angosto, para que 32 col alcancen)
         $out .= self::GS.'H'.chr(2); // HRI debajo del codigo
         $out .= self::GS.'f'.chr(0); // fuente A para el HRI
-        $out .= self::GS.'k'.chr(4).$code.chr(0);
+
+        $mode = ProductBarcode::isEan13($code) ? 2 : 4; // m=2 EAN13, m=4 CODE39
+        $out .= self::GS.'k'.chr($mode).$code.chr(0);
 
         return $out;
     }
