@@ -389,6 +389,10 @@ class ProcessImportFile implements ShouldQueue
             return '';
         }
 
+        if (is_float($cell)) {
+            return $this->floatToPlainText($cell);
+        }
+
         if (is_scalar($cell)) {
             return trim((string) $cell);
         }
@@ -403,6 +407,26 @@ class ProcessImportFile implements ShouldQueue
 
         // Imágenes, dibujos y demás objetos no aportan texto útil a la IA.
         return '';
+    }
+
+    /**
+     * Con formatData=false, PhpSpreadsheet devuelve las celdas numéricas
+     * como float crudo de PHP en vez del texto formateado de la planilla.
+     * Un (string) directo puede salir en notación científica para números
+     * grandes (ej. un código de barras leído como número) o con ruido de
+     * precisión de punto flotante para decimales (4603.02 -> algo como
+     * 4603.0199999999996). Eso confunde a la IA, que termina inventando
+     * dígitos al "interpretar" el valor — así se corrompió el barcode de
+     * varios productos del proveedor Rancagua. sprintf con formato fijo
+     * nunca usa notación científica, y el redondeo a 6 decimales absorbe
+     * el ruido de precisión sin perder ninguna cifra real de un negocio
+     * (precios, cantidades, códigos).
+     */
+    private function floatToPlainText(float $value): string
+    {
+        $formatted = rtrim(rtrim(sprintf('%.6F', $value), '0'), '.');
+
+        return $formatted === '' || $formatted === '-' ? '0' : $formatted;
     }
 
     // ══════════════════════════════════════════════════════════════════════

@@ -140,6 +140,13 @@ class ValidarImport extends Page
         $toUpdate = [];
         $invalidBarcodes = 0;
 
+        // ProductBarcode::errorMessage() solo detecta duplicados contra lo
+        // que ya está guardado en la base: dos filas de este mismo archivo
+        // con el mismo código no se ven entre sí porque ninguna se insertó
+        // todavía (todo el lote se valida antes de guardar nada). Por eso
+        // hay que llevar la cuenta acá también.
+        $seenBarcodes = [];
+
         foreach ($rows as $row) {
             if (trim($row['name'] ?? '') === '') {
                 continue;
@@ -152,9 +159,13 @@ class ValidarImport extends Page
                 ? (int) $row['existing_product_id']
                 : null;
 
-            if ($barcode !== null && ProductBarcode::errorMessage($barcode, $ignoreId) !== null) {
-                $barcode = null;
-                $invalidBarcodes++;
+            if ($barcode !== null) {
+                if (isset($seenBarcodes[$barcode]) || ProductBarcode::errorMessage($barcode, $ignoreId) !== null) {
+                    $barcode = null;
+                    $invalidBarcodes++;
+                } else {
+                    $seenBarcodes[$barcode] = true;
+                }
             }
 
             $data = [
