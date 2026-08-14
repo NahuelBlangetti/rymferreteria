@@ -64,8 +64,10 @@ class SaleTicketEscPosBuilder
         $ticket .= "\n";
         $ticket .= 'Medio de pago: '.(self::PAYMENT_LABELS[$sale->payment_method] ?? $sale->payment_method)."\n";
         $ticket .= "\n";
+        $ticket .= $this->centered('Verifique su mercaderia antes de retirarse.');
+        $ticket .= $this->centered('Cambios dentro de las 24 hs con su ticket.');
         $ticket .= self::ESC.'!'.chr(self::BOLD);
-        $ticket .= $this->centered('Devoluciones dentro de las 24 Horas');
+        $ticket .= $this->centered('¡DE LO CONTRARIO NO SE ACEPTAN RECLAMOS!');
         $ticket .= self::ESC.'!'.chr(0);
         $ticket .= "\n";
         $ticket .= $this->centered('¡Gracias por su compra!');
