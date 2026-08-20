@@ -23,8 +23,15 @@
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
-        <env name="DB_CONNECTION" value="sqlite"/>
-        <env name="DB_DATABASE" value=":memory:"/>
+        <!-- pdo_sqlite no está instalado en este entorno; se usa una base MySQL LOCAL dedicada
+             y aislada (ferreteria_test). La base real de este proyecto es remota (DigitalOcean),
+             así que los tests nunca deben apuntar a ella. -->
+        <env name="DB_CONNECTION" value="mysql"/>
+        <env name="DB_HOST" value="127.0.0.1"/>
+        <env name="DB_PORT" value="3306"/>
+        <env name="DB_DATABASE" value="ferreteria_test"/>
+        <env name="DB_USERNAME" value="root"/>
+        <env name="DB_PASSWORD" value="admin"/>
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
