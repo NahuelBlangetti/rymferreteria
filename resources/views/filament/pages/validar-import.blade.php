@@ -69,6 +69,56 @@
                 </span>
             </div>
 
+            @if ($updateCount > 0)
+                <div class="flex flex-col gap-4 border-b border-warning-200 bg-warning-500/5 px-6 py-4 dark:border-warning-500/20 sm:flex-row sm:items-end sm:justify-between">
+                    <div class="min-w-0">
+                        <p class="text-sm font-semibold text-gray-950 dark:text-white">
+                            Redondeo de precios de venta
+                        </p>
+                        <p class="mt-1 max-w-xl text-sm text-gray-500 dark:text-gray-400">
+                            Los productos que ya existen mantienen su margen actual. Elegí el redondeo y aplicá para ver los nuevos precios. Después podés corregir cualquiera a mano.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-end gap-2">
+                        <label class="flex min-w-[10rem] flex-col gap-1">
+                            <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Redondear a</span>
+                            <select
+                                wire:model="roundingStep"
+                                class="fi-select-input block w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm dark:border-white/15 dark:bg-white/5 dark:text-white"
+                            >
+                                @foreach (\App\Support\PriceRounding::STEPS as $step => $label)
+                                    <option value="{{ $step }}">{{ $label }}</option>
+                                @endforeach
+                            </select>
+                        </label>
+                        <label class="flex min-w-[10rem] flex-col gap-1">
+                            <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Tipo</span>
+                            <select
+                                wire:model="roundingMode"
+                                class="fi-select-input block w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm dark:border-white/15 dark:bg-white/5 dark:text-white"
+                            >
+                                @foreach (\App\Support\PriceRounding::MODES as $mode => $label)
+                                    <option value="{{ $mode }}">{{ $label }}</option>
+                                @endforeach
+                            </select>
+                        </label>
+                        <button
+                            wire:click="applySalePriceRounding"
+                            wire:loading.attr="disabled"
+                            wire:target="applySalePriceRounding"
+                            type="button"
+                            class="inline-flex items-center gap-2 rounded-xl bg-warning-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-warning-500 focus:outline-none focus:ring-2 focus:ring-warning-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <span wire:loading.remove wire:target="applySalePriceRounding" class="inline-flex items-center gap-2">
+                                <x-filament::icon icon="heroicon-o-calculator" class="h-4 w-4" />
+                                Aplicar redondeo
+                            </span>
+                            <span wire:loading wire:target="applySalePriceRounding">Aplicando…</span>
+                        </button>
+                    </div>
+                </div>
+            @endif
+
             {{-- Tabla --}}
             @if ($totalCount === 0)
                 <div class="flex flex-col items-center gap-3 px-6 py-16 text-center">
@@ -176,6 +226,11 @@
                                     </td>
                                     <td class="min-w-[7rem] px-4 py-2.5">
                                         <input type="number" step="0.01" min="0" wire:model="products.{{ $index }}.sale_price" class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm dark:border-white/15 dark:bg-white/5 dark:text-white" />
+                                        @if ($action === 'update' && (float) ($product['existing_sale'] ?? 0) > 0)
+                                            <p class="mt-1 text-[10px] leading-tight text-gray-400 dark:text-gray-500">
+                                                antes ${{ number_format((float) $product['existing_sale'], 2, ',', '.') }}
+                                            </p>
+                                        @endif
                                     </td>
                                     <td class="min-w-[6rem] px-4 py-2.5">
                                         <input type="number" step="1" min="0" wire:model="products.{{ $index }}.stock" class="fi-input block w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm dark:border-white/15 dark:bg-white/5 dark:text-white" />

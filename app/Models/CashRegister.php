@@ -61,10 +61,13 @@ class CashRegister extends Model
 
     public function salesTotalByPaymentMethod(string $paymentMethod): float
     {
-        return (float) $this->sales()
-            ->where('status', 'completed')
-            ->where('payment_method', $paymentMethod)
-            ->sum('total');
+        return (float) SalePayment::query()
+            ->where('method', $paymentMethod)
+            ->whereHas('sale', function ($query) {
+                $query->where('cash_register_id', $this->id)
+                    ->where('status', 'completed');
+            })
+            ->sum('amount');
     }
 
     public function totalSales(): float

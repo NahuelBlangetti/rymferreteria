@@ -4,6 +4,7 @@ namespace App\Services\Tickets;
 
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Support\PaymentMethods;
 
 class SaleTicketEscPosBuilder
 {
@@ -26,14 +27,14 @@ class SaleTicketEscPosBuilder
     private const GS = "\x1D";
 
     private const PAYMENT_LABELS = [
-        'cash'     => 'Efectivo',
+        'cash' => 'Efectivo',
         'transfer' => 'Transferencia',
-        'card'     => 'Tarjeta',
+        'card' => 'Tarjeta',
     ];
 
     public function build(Sale $sale): string
     {
-        $sale->loadMissing('items');
+        $sale->loadMissing(['items', 'payments']);
 
         $ticket = self::ESC.'@'; // Reset impresora
 
@@ -62,7 +63,7 @@ class SaleTicketEscPosBuilder
         $ticket .= $this->separator();
 
         $ticket .= "\n";
-        $ticket .= 'Medio de pago: '.(self::PAYMENT_LABELS[$sale->payment_method] ?? $sale->payment_method)."\n";
+        $ticket .= $this->paymentLines($sale);
         $ticket .= "\n";
         $ticket .= $this->centered('Verifique su mercaderia antes de retirarse.');
         $ticket .= $this->centered('Cambios dentro de las 24 hs con su ticket.');
@@ -76,6 +77,36 @@ class SaleTicketEscPosBuilder
         $ticket .= self::GS.'V'.chr(0); // Corte de papel
 
         return $ticket;
+    }
+
+    private function paymentLines(Sale $sale): string
+    {
+        $payments = $sale->payments;
+
+        if ($payments->isEmpty()) {
+            $label = self::PAYMENT_LABELS[$sale->payment_method]
+                ?? PaymentMethods::label($sale->payment_method);
+
+            return 'Medio de pago: '.$this->sanitize($label)."\n";
+        }
+
+        if ($payments->count() === 1) {
+            $label = self::PAYMENT_LABELS[$payments->first()->method]
+                ?? PaymentMethods::label($payments->first()->method);
+
+            return 'Medio de pago: '.$this->sanitize($label)."\n";
+        }
+
+        $out = $this->sanitize('Pago mixto:')."\n";
+
+        foreach ($payments as $payment) {
+            $label = self::PAYMENT_LABELS[$payment->method]
+                ?? PaymentMethods::label($payment->method);
+
+            $out .= $this->totalLine($label, (float) $payment->amount);
+        }
+
+        return $out;
     }
 
     /**

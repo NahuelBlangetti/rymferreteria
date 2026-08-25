@@ -270,15 +270,19 @@
                     </div>
                     <div class="px-6 py-4 flex flex-col gap-4">
 
-                        {{-- Botones de método de pago --}}
+                        <p class="text-xs text-gray-500 dark:text-gray-400">
+                            Marcá uno o más medios. Si elegís dos o tres, se divide el total (pago mixto).
+                        </p>
+
+                        {{-- Botones de método de pago (se pueden marcar varios) --}}
                         <div class="grid grid-cols-3 gap-2">
                             <button
-                                wire:click="$set('paymentMethod', 'cash')"
+                                wire:click="togglePaymentMethod('cash')"
                                 type="button"
                                 @class([
                                     'flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-4 text-sm font-semibold transition focus:outline-none',
-                                    'border-success-500 bg-success-50 text-success-700 dark:bg-success-950/40 dark:text-success-300 dark:border-success-600' => $paymentMethod === 'cash',
-                                    'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300 hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:text-gray-300' => $paymentMethod !== 'cash',
+                                    'border-success-500 bg-success-50 text-success-700 dark:bg-success-950/40 dark:text-success-300 dark:border-success-600' => $this->isPaymentMethodSelected('cash'),
+                                    'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300 hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:text-gray-300' => ! $this->isPaymentMethodSelected('cash'),
                                 ])
                             >
                                 <x-filament::icon icon="heroicon-o-banknotes" class="h-6 w-6" />
@@ -286,12 +290,12 @@
                             </button>
 
                             <button
-                                wire:click="$set('paymentMethod', 'transfer')"
+                                wire:click="togglePaymentMethod('transfer')"
                                 type="button"
                                 @class([
                                     'flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-4 text-sm font-semibold transition focus:outline-none',
-                                    'border-info-500 bg-info-50 text-info-700 dark:bg-info-950/40 dark:text-info-300 dark:border-info-600' => $paymentMethod === 'transfer',
-                                    'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300 hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:text-gray-300' => $paymentMethod !== 'transfer',
+                                    'border-info-500 bg-info-50 text-info-700 dark:bg-info-950/40 dark:text-info-300 dark:border-info-600' => $this->isPaymentMethodSelected('transfer'),
+                                    'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300 hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:text-gray-300' => ! $this->isPaymentMethodSelected('transfer'),
                                 ])
                             >
                                 <x-filament::icon icon="heroicon-o-device-phone-mobile" class="h-6 w-6" />
@@ -299,18 +303,80 @@
                             </button>
 
                             <button
-                                wire:click="$set('paymentMethod', 'card')"
+                                wire:click="togglePaymentMethod('card')"
                                 type="button"
                                 @class([
                                     'flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-4 text-sm font-semibold transition focus:outline-none',
-                                    'border-warning-500 bg-warning-50 text-warning-700 dark:bg-warning-950/40 dark:text-warning-300 dark:border-warning-600' => $paymentMethod === 'card',
-                                    'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300 hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:text-gray-300' => $paymentMethod !== 'card',
+                                    'border-warning-500 bg-warning-50 text-warning-700 dark:bg-warning-950/40 dark:text-warning-300 dark:border-warning-600' => $this->isPaymentMethodSelected('card'),
+                                    'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300 hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:text-gray-300' => ! $this->isPaymentMethodSelected('card'),
                                 ])
                             >
                                 <x-filament::icon icon="heroicon-o-credit-card" class="h-6 w-6" />
                                 Tarjeta
                             </button>
                         </div>
+
+                        @if (count($selectedPaymentMethods) >= 2)
+                            <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-white/10 dark:bg-white/5">
+                                <div class="mb-3 flex items-center justify-between gap-2">
+                                    <p class="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                                        Pago mixto
+                                    </p>
+                                    <button
+                                        wire:click="splitPaymentEqually"
+                                        type="button"
+                                        class="text-xs font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400"
+                                    >
+                                        Dividir en partes iguales
+                                    </button>
+                                </div>
+
+                                <div class="flex flex-col gap-2">
+                                    @foreach ($selectedPaymentMethods as $method)
+                                        <label class="flex items-center gap-3">
+                                            <span class="w-28 shrink-0 text-sm text-gray-600 dark:text-gray-300">
+                                                {{ match($method) {
+                                                    'cash' => 'Efectivo',
+                                                    'transfer' => 'Transferencia',
+                                                    'card' => 'Tarjeta',
+                                                    default => $method,
+                                                } }}
+                                            </span>
+                                            <div class="relative min-w-0 flex-1">
+                                                <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">$</span>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    min="0.01"
+                                                    wire:model.live.debounce.400ms="paymentAmounts.{{ $method }}"
+                                                    class="fi-input block w-full rounded-lg border border-gray-300 bg-white py-2 pl-7 pr-3 text-sm text-gray-900 shadow-sm dark:border-white/20 dark:bg-white/5 dark:text-white"
+                                                />
+                                            </div>
+                                        </label>
+                                    @endforeach
+                                </div>
+
+                                @php
+                                    $partsTotal = $this->getPaymentPartsTotal();
+                                    $saleTotal = $this->getSubtotal();
+                                    $remaining = round($saleTotal - $partsTotal, 2);
+                                @endphp
+
+                                <p @class([
+                                    'mt-3 text-xs font-medium',
+                                    'text-success-700 dark:text-success-400' => abs($remaining) < 0.01,
+                                    'text-danger-600 dark:text-danger-400' => abs($remaining) >= 0.01,
+                                ])>
+                                    @if (abs($remaining) < 0.01)
+                                        Cubierto: ${{ number_format($partsTotal, 2, ',', '.') }} / ${{ number_format($saleTotal, 2, ',', '.') }}
+                                    @elseif ($remaining > 0)
+                                        Falta asignar ${{ number_format($remaining, 2, ',', '.') }}
+                                    @else
+                                        Sobran ${{ number_format(abs($remaining), 2, ',', '.') }} respecto del total
+                                    @endif
+                                </p>
+                            </div>
+                        @endif
 
                         {{-- Notas opcionales --}}
                         <textarea
@@ -336,10 +402,10 @@
                             type="button"
                             @class([
                                 'w-full rounded-xl px-6 py-4 text-base font-bold text-white shadow-md transition focus:outline-none focus:ring-4',
-                                'bg-primary-600 hover:bg-primary-500 focus:ring-primary-500/30 cursor-pointer' => ! empty($paymentMethod),
-                                'bg-gray-400 cursor-not-allowed' => empty($paymentMethod),
+                                'bg-primary-600 hover:bg-primary-500 focus:ring-primary-500/30 cursor-pointer' => $this->paymentCoversTotal(),
+                                'bg-gray-400 cursor-not-allowed' => ! $this->paymentCoversTotal(),
                             ])
-                            @if (empty($paymentMethod)) disabled @endif
+                            @if (! $this->paymentCoversTotal()) disabled @endif
                         >
                             <span wire:loading.remove wire:target="confirmSale">
                                 <span class="flex items-center justify-center gap-2">
@@ -352,16 +418,26 @@
                             </span>
                         </button>
 
-                        @if (! empty($paymentMethod))
+                        @if ($selectedPaymentMethods !== [])
                             <p class="text-center text-xs text-gray-500 dark:text-gray-400">
                                 Pago:
                                 <strong class="text-gray-700 dark:text-gray-200">
-                                    {{ match($paymentMethod) {
-                                        'cash'     => 'Efectivo',
-                                        'transfer' => 'Transferencia',
-                                        'card'     => 'Tarjeta',
-                                        default    => $paymentMethod,
-                                    } }}
+                                    @if (count($selectedPaymentMethods) === 1)
+                                        {{ match($selectedPaymentMethods[0]) {
+                                            'cash'     => 'Efectivo',
+                                            'transfer' => 'Transferencia',
+                                            'card'     => 'Tarjeta',
+                                            default    => $selectedPaymentMethods[0],
+                                        } }}
+                                    @else
+                                        Mixto
+                                        ({{ collect($selectedPaymentMethods)->map(fn ($method) => match($method) {
+                                            'cash' => 'Efectivo',
+                                            'transfer' => 'Transferencia',
+                                            'card' => 'Tarjeta',
+                                            default => $method,
+                                        })->implode(' + ') }})
+                                    @endif
                                 </strong>
                             </p>
                         @endif

@@ -132,6 +132,30 @@ class CashRegisterFlowTest extends TestCase
         $this->assertEquals(1550.0, $register->calculateExpectedAmount());
     }
 
+    public function test_expected_amount_includes_only_the_cash_share_of_a_mixed_sale(): void
+    {
+        $user = $this->user();
+        $product = $this->product();
+
+        $register = CashRegister::create([
+            'user_id' => $user->id,
+            'opening_amount' => 1000,
+            'opened_at' => now(),
+            'status' => 'open',
+        ]);
+
+        $sale = $this->sale($register, $user, $product, 800, paymentMethod: 'mixed');
+        $sale->storePayments([
+            ['method' => 'cash', 'amount' => 500],
+            ['method' => 'transfer', 'amount' => 300],
+        ]);
+
+        $this->assertEquals(1500.0, $register->calculateExpectedAmount());
+        $this->assertEquals(500.0, $register->cashSalesTotal());
+        $this->assertEquals(300.0, $register->transferSalesTotal());
+        $this->assertEquals(0.0, $register->cardSalesTotal());
+    }
+
     public function test_close_sets_closed_at_automatically_and_computes_difference(): void
     {
         $user = $this->user();

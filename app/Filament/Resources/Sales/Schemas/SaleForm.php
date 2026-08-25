@@ -3,10 +3,12 @@
 namespace App\Filament\Resources\Sales\Schemas;
 
 use App\Models\CashRegister;
+use App\Support\PaymentMethods;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Get;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Schema;
 
 class SaleForm
@@ -35,13 +37,15 @@ class SaleForm
 
                 Select::make('payment_method')
                     ->label('Medio de pago')
-                    ->options([
-                        'cash'     => 'Efectivo',
-                        'transfer' => 'Transferencia',
-                        'card'     => 'Tarjeta',
-                    ])
+                    ->options(fn ($record) => $record?->payment_method === PaymentMethods::MIXED
+                        ? PaymentMethods::labels()
+                        : PaymentMethods::options())
                     ->required()
                     ->disabled($isCompleted),
+
+                Text::make(fn ($record): string => 'Desglose: '.($record?->paymentSummary() ?? '—'))
+                    ->visible(fn ($record): bool => $record?->payment_method === PaymentMethods::MIXED)
+                    ->columnSpanFull(),
 
                 Select::make('user_id')
                     ->label('Vendedor')
@@ -94,7 +98,7 @@ class SaleForm
                         fn (Get $get): \Closure => function (string $attribute, $value, \Closure $fail) use ($get) {
                             $expected = (float) $get('subtotal') - (float) $get('discount');
                             if (abs((float) $value - $expected) > 0.01) {
-                                $fail('El total debe ser igual a subtotal − descuento ($' . number_format($expected, 2) . ').');
+                                $fail('El total debe ser igual a subtotal − descuento ($'.number_format($expected, 2).').');
                             }
                         },
                     ]),

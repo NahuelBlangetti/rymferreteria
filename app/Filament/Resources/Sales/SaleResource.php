@@ -13,6 +13,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class SaleResource extends Resource
 {
@@ -21,9 +22,13 @@ class SaleResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShoppingCart;
 
     protected static ?string $navigationLabel = 'Ventas';
+
     protected static ?string $modelLabel = 'venta';
+
     protected static ?string $pluralModelLabel = 'ventas';
+
     protected static string|\UnitEnum|null $navigationGroup = 'Operaciones';
+
     protected static ?int $navigationSort = 1;
 
     public static function form(Schema $schema): Schema
@@ -50,5 +55,10 @@ class SaleResource extends Resource
             'create' => CreateSale::route('/create'),
             'edit' => EditSale::route('/{record}/edit'),
         ];
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->with('payments');
     }
 }

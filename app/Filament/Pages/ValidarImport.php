@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\Category;
 use App\Models\ProductImport;
 use App\Models\Supplier;
+use App\Support\PriceRounding;
 use App\Support\ProductBarcode;
 use BackedEnum;
 use Filament\Notifications\Notification;
@@ -47,13 +48,23 @@ class ValidarImport extends Page
     ];
 
     // ── Estado ────────────────────────────────────────────────────────────
-    public ?int    $importId          = null;
-    public string  $importedFileName  = '';
-    public array   $products          = [];
-    public array   $categoryOptions   = [];
-    public array   $supplierOptions   = [];
-    public ?int    $importSupplierId  = null;
-    public bool    $supplierAutoDetected = false;
+    public ?int $importId = null;
+
+    public string $importedFileName = '';
+
+    public array $products = [];
+
+    public array $categoryOptions = [];
+
+    public array $supplierOptions = [];
+
+    public ?int $importSupplierId = null;
+
+    public bool $supplierAutoDetected = false;
+
+    public int $roundingStep = 0;
+
+    public string $roundingMode = PriceRounding::MODE_UP;
 
     public function getMaxContentWidth(): Width|string|null
     {
@@ -66,6 +77,7 @@ class ValidarImport extends Page
 
         if (! $id) {
             $this->redirectRoute('filament.admin.pages.cargar-productos');
+
             return;
         }
 
@@ -85,16 +97,116 @@ class ValidarImport extends Page
                 ->send();
 
             $this->redirectRoute('filament.admin.pages.cargar-productos');
+
             return;
         }
 
-        $this->importId         = $import->id;
+        $this->importId = $import->id;
         $this->importedFileName = $import->filename;
         $this->importSupplierId = $import->supplier_id;
-        $this->products         = $import->products ?? [];
+        $this->products = $this->hydrateExistingSalePrices($import->products ?? []);
 
         $this->categoryOptions = Category::query()->orderBy('name')->pluck('name', 'id')->all();
         $this->supplierOptions = Supplier::query()->where('active', true)->orderBy('name')->pluck('name', 'id')->all();
+    }
+
+    public function applySalePriceRounding(): void
+    {
+        $updated = 0;
+
+        foreach ($this->products as $index => $row) {
+            if (! ($row['selected'] ?? false)) {
+                continue;
+            }
+
+            if (($row['action'] ?? 'create') !== 'update') {
+                continue;
+            }
+
+            $cost = (float) ($row['cost_price'] ?? 0);
+
+            if ($cost <= 0) {
+                continue;
+            }
+
+            $this->products[$index]['sale_price'] = PriceRounding::saleFromCost(
+                $cost,
+                $this->marginForRow($row),
+                (float) $this->roundingStep,
+                $this->roundingMode,
+            );
+            $updated++;
+        }
+
+        if ($updated === 0) {
+            Notification::make()
+                ->title('No hay productos existentes seleccionados')
+                ->body('Marcá los productos que ya están en el sistema para recalcular su precio de venta.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $stepLabel = PriceRounding::STEPS[$this->roundingStep] ?? 'personalizado';
+
+        Notification::make()
+            ->title($updated === 1
+                ? 'Se recalculó 1 precio de venta'
+                : "Se recalcularon {$updated} precios de venta")
+            ->body($this->roundingStep > 0
+                ? "Redondeo: {$stepLabel} · ".PriceRounding::MODES[$this->roundingMode]
+                : 'Se mantuvo el margen actual, sin redondeo comercial.')
+            ->success()
+            ->send();
+    }
+
+    /**
+     * Importaciones viejas no traen existing_margin ni venta recalculada:
+     * si el archivo dejó sale_price en 0, se sugiere la venta con el margen actual.
+     *
+     * @param  array<int, array<string, mixed>>  $products
+     * @return array<int, array<string, mixed>>
+     */
+    private function hydrateExistingSalePrices(array $products): array
+    {
+        foreach ($products as $index => $row) {
+            if (($row['action'] ?? 'create') !== 'update') {
+                continue;
+            }
+
+            if ((float) ($row['sale_price'] ?? 0) > 0) {
+                continue;
+            }
+
+            $cost = (float) ($row['cost_price'] ?? 0);
+            $margin = $this->marginForRow($row);
+
+            if ($cost > 0 && $margin > 0) {
+                $products[$index]['sale_price'] = PriceRounding::saleFromCost($cost, $margin);
+            } elseif ((float) ($row['existing_sale'] ?? 0) > 0) {
+                $products[$index]['sale_price'] = (float) $row['existing_sale'];
+            }
+        }
+
+        return $products;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function marginForRow(array $row): float
+    {
+        $margin = (float) ($row['existing_margin'] ?? 0);
+
+        if ($margin > 0) {
+            return $margin;
+        }
+
+        return PriceRounding::marginFromPrices(
+            (float) ($row['existing_cost'] ?? 0),
+            (float) ($row['existing_sale'] ?? 0),
+        );
     }
 
     // ── Proveedor ─────────────────────────────────────────────────────────
@@ -111,6 +223,7 @@ class ValidarImport extends Page
             $this->importSupplierId = $existing->id;
             $this->dispatch('supplier-created', id: $existing->id, name: $existing->name);
             Notification::make()->title("Se seleccionó '{$existing->name}' (ya existía)")->info()->send();
+
             return;
         }
 
@@ -130,11 +243,12 @@ class ValidarImport extends Page
 
         if ($rows->isEmpty()) {
             Notification::make()->title('No seleccionaste ningún producto')->warning()->send();
+
             return;
         }
 
         $supplierId = $this->importSupplierId ?: null;
-        $now        = now();
+        $now = now();
 
         $toInsert = [];
         $toUpdate = [];
@@ -169,18 +283,18 @@ class ValidarImport extends Page
             }
 
             $data = [
-                'category_id'       => $row['category_id'] ?: null,
-                'supplier_id'       => $supplierId,
-                'name'              => $row['name'],
-                'sku'               => filled($row['sku'] ?? null) ? trim((string) $row['sku']) : null,
-                'barcode'           => $barcode,
-                'unit'              => $this->normalizeUnit($row['unit'] ?? null),
-                'cost_price'        => $cost,
-                'sale_price'        => $sale,
+                'category_id' => $row['category_id'] ?: null,
+                'supplier_id' => $supplierId,
+                'name' => $row['name'],
+                'sku' => filled($row['sku'] ?? null) ? trim((string) $row['sku']) : null,
+                'barcode' => $barcode,
+                'unit' => $this->normalizeUnit($row['unit'] ?? null),
+                'cost_price' => $cost,
+                'sale_price' => $sale,
                 'margin_percentage' => $cost > 0 ? round(($sale / $cost - 1) * 100, 2) : 0,
-                'stock'             => round((float) str_replace(',', '.', (string) $row['stock']), 3),
-                'min_stock'         => round((float) str_replace(',', '.', (string) ($row['min_stock'] ?? 0)), 3),
-                'active'            => true,
+                'stock' => round((float) str_replace(',', '.', (string) $row['stock']), 3),
+                'min_stock' => round((float) str_replace(',', '.', (string) ($row['min_stock'] ?? 0)), 3),
+                'active' => true,
             ];
 
             if (($row['action'] ?? 'create') === 'update' && ! empty($row['existing_product_id'])) {
@@ -214,6 +328,7 @@ class ValidarImport extends Page
                 ->danger()
                 ->persistent()
                 ->send();
+
             return;
         }
 
@@ -224,11 +339,15 @@ class ValidarImport extends Page
         }
 
         $parts = [];
-        if ($created > 0) $parts[] = "{$created} " . ($created === 1 ? 'creado' : 'creados');
-        if ($updated > 0) $parts[] = "{$updated} " . ($updated === 1 ? 'actualizado' : 'actualizados');
+        if ($created > 0) {
+            $parts[] = "{$created} ".($created === 1 ? 'creado' : 'creados');
+        }
+        if ($updated > 0) {
+            $parts[] = "{$updated} ".($updated === 1 ? 'actualizado' : 'actualizados');
+        }
 
         Notification::make()
-            ->title('Productos: ' . implode(' · ', $parts))
+            ->title('Productos: '.implode(' · ', $parts))
             ->body($invalidBarcodes > 0
                 ? "Se omitieron {$invalidBarcodes} código(s) de barras inválido(s). Podés asignarlos después escaneando el producto."
                 : null)

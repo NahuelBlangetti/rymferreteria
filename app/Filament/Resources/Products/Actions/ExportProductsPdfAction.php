@@ -15,31 +15,31 @@ class ExportProductsPdfAction
 {
     private const TYPES = [
         'barcodes' => [
-            'label'        => 'Códigos de barras',
+            'label' => 'Códigos de barras',
             'modalHeading' => 'Exportar códigos de barras',
-            'description'  => 'Listado con nombre del producto y su código de barras.',
-            'pdfTitle'     => 'Códigos de Barras',
-            'view'         => 'pdf.products-barcodes',
-            'orientation'  => 'portrait',
-            'filename'     => 'codigos-barras',
+            'description' => 'Listado con nombre del producto y el código de barras gráfico para imprimir y escanear.',
+            'pdfTitle' => 'Códigos de Barras',
+            'view' => 'pdf.products-barcodes',
+            'orientation' => 'portrait',
+            'filename' => 'codigos-barras',
         ],
         'price_list' => [
-            'label'        => 'Lista de precios (Clientes)',
+            'label' => 'Lista de precios (Clientes)',
             'modalHeading' => 'Exportar lista de precios para clientes',
-            'description'  => 'Para entregar o enviar a clientes. Incluye nombre, código, categoría y precio de venta.',
-            'pdfTitle'     => 'Lista de Precios — Clientes',
-            'view'         => 'pdf.products-price-list',
-            'orientation'  => 'portrait',
-            'filename'     => 'lista-precios',
+            'description' => 'Para entregar o enviar a clientes. Incluye nombre, código, categoría y precio de venta.',
+            'pdfTitle' => 'Lista de Precios — Clientes',
+            'view' => 'pdf.products-price-list',
+            'orientation' => 'portrait',
+            'filename' => 'lista-precios',
         ],
         'inventory' => [
-            'label'        => 'Inventario interno (Proveedores)',
+            'label' => 'Inventario interno (Proveedores)',
             'modalHeading' => 'Exportar inventario para proveedores',
-            'description'  => 'Para compartir con proveedores. Incluye costo, margen, stock y datos del proveedor.',
-            'pdfTitle'     => 'Inventario Interno — Proveedores',
-            'view'         => 'pdf.products-inventory',
-            'orientation'  => 'landscape',
-            'filename'     => 'inventario',
+            'description' => 'Para compartir con proveedores. Incluye costo, margen, stock y datos del proveedor.',
+            'pdfTitle' => 'Inventario Interno — Proveedores',
+            'view' => 'pdf.products-inventory',
+            'orientation' => 'landscape',
+            'filename' => 'inventario',
         ],
     ];
 
@@ -47,12 +47,12 @@ class ExportProductsPdfAction
     {
         $meta = self::TYPES[$type];
 
-        return Action::make('exportPdf_' . $type)
+        return Action::make('exportPdf_'.$type)
             ->label($meta['label'])
             ->icon('heroicon-o-document-arrow-down')
             ->modalHeading($meta['modalHeading'])
-            ->modalDescription(fn (HasTable $livewire): string => $meta['description'] . ' '
-                . self::exportScopeDescription($livewire->getTableQueryForExport()->count()))
+            ->modalDescription(fn (HasTable $livewire): string => $meta['description'].' '
+                .self::exportScopeDescription($livewire->getTableQueryForExport()->count()))
             ->modalSubmitActionLabel('Descargar PDF')
             ->modalWidth('sm')
             ->action(fn (HasTable $livewire): mixed => self::exportFromQuery(
@@ -65,13 +65,13 @@ class ExportProductsPdfAction
     {
         $meta = self::TYPES[$type];
 
-        return BulkAction::make('exportPdf_' . $type)
+        return BulkAction::make('exportPdf_'.$type)
             ->label($meta['label'])
             ->icon('heroicon-o-document-arrow-down')
             ->color('info')
             ->modalHeading($meta['modalHeading'])
-            ->modalDescription(fn (Collection $records): string => $meta['description'] . ' '
-                . self::exportScopeDescription($records->count()))
+            ->modalDescription(fn (Collection $records): string => $meta['description'].' '
+                .self::exportScopeDescription($records->count()))
             ->modalSubmitActionLabel('Descargar PDF')
             ->modalWidth('sm')
             ->action(fn (Collection $records): mixed => self::exportFromCollection($records, $type))
@@ -107,7 +107,7 @@ class ExportProductsPdfAction
         $records->load(['category', 'supplier']);
 
         $products = $records->sortBy(
-            fn ($product) => ($product->category?->name ?? 'zzz') . $product->name,
+            fn ($product) => ($product->category?->name ?? 'zzz').$product->name,
         )->values();
 
         if ($products->isEmpty()) {
@@ -129,15 +129,15 @@ class ExportProductsPdfAction
 
         $pdf = Pdf::loadView($meta['view'], [
             'products' => $products,
-            'store'    => config('store'),
+            'store' => config('store'),
             'pdfTitle' => $meta['pdfTitle'],
         ])->setPaper('a4', $meta['orientation']);
 
         $slug = str(config('store.name'))->slug();
-        $filename = "{$meta['filename']}-{$slug}-" . now()->format('Y-m-d') . '.pdf';
+        $filename = "{$meta['filename']}-{$slug}-".now()->format('Y-m-d').'.pdf';
 
         return response()->streamDownload(
-            fn () => print($pdf->output()),
+            fn () => print ($pdf->output()),
             $filename,
             ['Content-Type' => 'application/pdf'],
         );

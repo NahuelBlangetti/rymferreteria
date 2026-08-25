@@ -7,11 +7,13 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductImport;
 use App\Services\DiscordNotifier;
+use App\Support\PriceRounding;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Queue\SerializesModels;
@@ -20,18 +22,23 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\RichText\RichText;
 use Symfony\Component\Process\Process;
 
 class ProcessImportFile implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int  $timeout      = 600; // 10 minutos máximo
-    public int  $tries        = 1;   // sin reintentos — las llamadas a OpenAI son costosas
+    public int $timeout = 600; // 10 minutos máximo
+
+    public int $tries = 1;   // sin reintentos — las llamadas a OpenAI son costosas
+
     public bool $failOnTimeout = true;
 
     private const OPENAI_INPUT_COST_PER_MILLION_TOKENS = 0.40;
+
     private const CHUNK_SIZE = 4000;
+
     private const MAX_CHUNKS = 12;
 
     private const ALLOWED_UNITS = ['unidad', 'metro', 'm2', 'kg', 'g', 'litro', 'caja', 'rollo', 'par', 'docena'];
@@ -55,13 +62,13 @@ class ProcessImportFile implements ShouldQueue
     public function handle(): void
     {
         $startedAt = microtime(true);
-        $import    = ProductImport::findOrFail($this->importId);
+        $import = ProductImport::findOrFail($this->importId);
 
         $this->logInfo('Job started', [
-            'status'      => $import->status,
-            'filename'    => $import->filename,
-            'file_path'   => $import->file_path,
-            'user_id'     => $import->user_id,
+            'status' => $import->status,
+            'filename' => $import->filename,
+            'file_path' => $import->file_path,
+            'user_id' => $import->user_id,
             'supplier_id' => $import->supplier_id,
             'diagnostics' => $this->serverDiagnostics($import),
         ]);
@@ -71,17 +78,17 @@ class ProcessImportFile implements ShouldQueue
         try {
             set_time_limit(0);
 
-            $fullPath  = Storage::disk('local')->path($import->file_path);
+            $fullPath = Storage::disk('local')->path($import->file_path);
             $extension = strtolower(pathinfo($import->filename, PATHINFO_EXTENSION));
             $fileExists = is_file($fullPath);
-            $fileSize   = $fileExists ? filesize($fullPath) : null;
+            $fileSize = $fileExists ? filesize($fullPath) : null;
 
             $this->logInfo('Preparing file extraction', [
-                'full_path'  => $fullPath,
-                'extension'  => $extension,
-                'exists'     => $fileExists,
+                'full_path' => $fullPath,
+                'extension' => $extension,
+                'exists' => $fileExists,
                 'size_bytes' => $fileSize,
-                'readable'   => $fileExists ? is_readable($fullPath) : false,
+                'readable' => $fileExists ? is_readable($fullPath) : false,
             ]);
 
             if (! $fileExists) {
@@ -94,40 +101,40 @@ class ProcessImportFile implements ShouldQueue
                 : $this->extractTextFromSpreadsheet($fullPath);
 
             $this->logInfo('Text extracted', [
-                'extension'     => $extension,
-                'chars'         => mb_strlen($text),
-                'lines'         => substr_count($text, "\n") + 1,
-                'duration_ms'   => (int) ((microtime(true) - $extractStarted) * 1000),
-                'memory_peak_mb'=> round(memory_get_peak_usage(true) / 1024 / 1024, 1),
-                'preview'       => Str::limit(preg_replace('/\s+/', ' ', $text) ?? '', 180),
+                'extension' => $extension,
+                'chars' => mb_strlen($text),
+                'lines' => substr_count($text, "\n") + 1,
+                'duration_ms' => (int) ((microtime(true) - $extractStarted) * 1000),
+                'memory_peak_mb' => round(memory_get_peak_usage(true) / 1024 / 1024, 1),
+                'preview' => Str::limit(preg_replace('/\s+/', ' ', $text) ?? '', 180),
             ]);
 
             if (trim($text) === '') {
                 throw new \RuntimeException('No se pudo extraer texto del archivo. ¿Es un PDF escaneado (imagen) o una planilla vacía?');
             }
 
-            $text   = $this->filterText($text);
+            $text = $this->filterText($text);
             $chunks = $this->chunkText($text);
 
             $this->logInfo('Text prepared for OpenAI', [
                 'chars_after_filter' => mb_strlen($text),
-                'chunks'             => count($chunks),
-                'chunk_sizes'        => array_map(fn (string $chunk) => mb_strlen($chunk), $chunks),
-                'openai_model'       => config('services.openai.model'),
-                'openai_key_set'     => filled(config('services.openai.key')),
+                'chunks' => count($chunks),
+                'chunk_sizes' => array_map(fn (string $chunk) => mb_strlen($chunk), $chunks),
+                'openai_model' => config('services.openai.model'),
+                'openai_key_set' => filled(config('services.openai.key')),
             ]);
 
             $allExtracted = [];
             foreach ($chunks as $i => $chunk) {
                 $context = count($chunks) > 1
-                    ? "{$import->filename} (parte " . ($i + 1) . ' de ' . count($chunks) . ')'
+                    ? "{$import->filename} (parte ".($i + 1).' de '.count($chunks).')'
                     : $import->filename;
 
                 $this->logInfo('Calling OpenAI', [
-                    'chunk'       => $i + 1,
-                    'chunks_total'=> count($chunks),
+                    'chunk' => $i + 1,
+                    'chunks_total' => count($chunks),
                     'chunk_chars' => mb_strlen($chunk),
-                    'context'     => $context,
+                    'context' => $context,
                 ]);
 
                 $chunkStarted = microtime(true);
@@ -135,36 +142,36 @@ class ProcessImportFile implements ShouldQueue
                 $allExtracted = array_merge($allExtracted, $chunkProducts);
 
                 $this->logInfo('OpenAI chunk completed', [
-                    'chunk'         => $i + 1,
-                    'products'      => count($chunkProducts),
-                    'duration_ms'   => (int) ((microtime(true) - $chunkStarted) * 1000),
-                    'memory_peak_mb'=> round(memory_get_peak_usage(true) / 1024 / 1024, 1),
+                    'chunk' => $i + 1,
+                    'products' => count($chunkProducts),
+                    'duration_ms' => (int) ((microtime(true) - $chunkStarted) * 1000),
+                    'memory_peak_mb' => round(memory_get_peak_usage(true) / 1024 / 1024, 1),
                 ]);
             }
 
             $products = $this->detectDuplicates($this->mapToCategories($allExtracted));
-            $count    = count($products);
+            $count = count($products);
 
             $import->update([
-                'status'        => 'done',
-                'products'      => $products,
+                'status' => 'done',
+                'products' => $products,
                 'product_count' => $count,
-                'processed_at'  => now(),
+                'processed_at' => now(),
             ]);
 
             $this->logInfo('Import completed', [
                 'product_count' => $count,
-                'duration_ms'   => (int) ((microtime(true) - $startedAt) * 1000),
-                'memory_peak_mb'=> round(memory_get_peak_usage(true) / 1024 / 1024, 1),
+                'duration_ms' => (int) ((microtime(true) - $startedAt) * 1000),
+                'memory_peak_mb' => round(memory_get_peak_usage(true) / 1024 / 1024, 1),
             ]);
 
             Notification::make()
                 ->title('Importación lista ✓')
                 ->body(
                     ($count > 0
-                        ? "{$count} " . ($count === 1 ? 'producto extraído' : 'productos extraídos')
+                        ? "{$count} ".($count === 1 ? 'producto extraído' : 'productos extraídos')
                         : 'No se detectaron productos')
-                    . " de \"{$import->filename}\". Revisalos antes de guardar."
+                    ." de \"{$import->filename}\". Revisalos antes de guardar."
                 )
                 ->success()
                 ->persistent()
@@ -218,22 +225,22 @@ class ProcessImportFile implements ShouldQueue
         $diagnostics = $this->serverDiagnostics($import);
 
         $this->logError('Import failed', $e, [
-            'import_id'    => $import->id,
-            'filename'     => $import->filename,
-            'file_path'    => $import->file_path,
-            'status'       => $import->status,
-            'user_id'      => $import->user_id,
-            'message'      => $message,
-            'diagnostics'  => $diagnostics,
+            'import_id' => $import->id,
+            'filename' => $import->filename,
+            'file_path' => $import->file_path,
+            'status' => $import->status,
+            'user_id' => $import->user_id,
+            'message' => $message,
+            'diagnostics' => $diagnostics,
         ]);
 
         $import->update([
-            'status'        => 'error',
+            'status' => 'error',
             'error_message' => $message,
         ]);
 
         if ($notifyDiscord) {
-            (new DiscordNotifier())->notify(
+            (new DiscordNotifier)->notify(
                 '❌ Error al procesar importación',
                 sprintf(
                     "**Archivo:** %s\n**Usuario:** %s\n**Error:** %s\n**Clase:** %s\n**Línea:** %s:%d\n**Cola:** %s\n**Memoria peak:** %s MB\n**OpenAI key:** %s\n**pdftotext:** %s",
@@ -274,9 +281,9 @@ class ProcessImportFile implements ShouldQueue
         Log::channel('imports')->error($message, array_merge([
             'import_id' => $this->importId,
             'exception' => $e::class,
-            'error'     => $e->getMessage(),
-            'file'      => $e->getFile() . ':' . $e->getLine(),
-            'trace'     => collect(explode("\n", $e->getTraceAsString()))->take(12)->all(),
+            'error' => $e->getMessage(),
+            'file' => $e->getFile().':'.$e->getLine(),
+            'trace' => collect(explode("\n", $e->getTraceAsString()))->take(12)->all(),
         ], $context));
     }
 
@@ -287,25 +294,25 @@ class ProcessImportFile implements ShouldQueue
             : null;
 
         return [
-            'app_env'              => config('app.env'),
-            'queue'                => config('queue.default'),
-            'php_version'          => PHP_VERSION,
-            'memory_limit'         => ini_get('memory_limit'),
-            'memory_usage_mb'      => round(memory_get_usage(true) / 1024 / 1024, 1),
-            'memory_peak_mb'       => round(memory_get_peak_usage(true) / 1024 / 1024, 1),
-            'max_execution_time'   => ini_get('max_execution_time'),
-            'openai_model'         => config('services.openai.model'),
-            'openai_key_set'       => filled(config('services.openai.key')),
-            'pdftotext_available'  => $this->commandExists('pdftotext'),
-            'file_exists'          => $fullPath ? is_file($fullPath) : false,
-            'file_size_bytes'      => ($fullPath && is_file($fullPath)) ? filesize($fullPath) : null,
-            'disk_free_mb'         => $fullPath ? @round(disk_free_space(dirname($fullPath)) / 1024 / 1024, 1) : null,
+            'app_env' => config('app.env'),
+            'queue' => config('queue.default'),
+            'php_version' => PHP_VERSION,
+            'memory_limit' => ini_get('memory_limit'),
+            'memory_usage_mb' => round(memory_get_usage(true) / 1024 / 1024, 1),
+            'memory_peak_mb' => round(memory_get_peak_usage(true) / 1024 / 1024, 1),
+            'max_execution_time' => ini_get('max_execution_time'),
+            'openai_model' => config('services.openai.model'),
+            'openai_key_set' => filled(config('services.openai.key')),
+            'pdftotext_available' => $this->commandExists('pdftotext'),
+            'file_exists' => $fullPath ? is_file($fullPath) : false,
+            'file_size_bytes' => ($fullPath && is_file($fullPath)) ? filesize($fullPath) : null,
+            'disk_free_mb' => $fullPath ? @round(disk_free_space(dirname($fullPath)) / 1024 / 1024, 1) : null,
         ];
     }
 
     private function commandExists(string $command): bool
     {
-        $process = Process::fromShellCommandline('command -v ' . escapeshellarg($command));
+        $process = Process::fromShellCommandline('command -v '.escapeshellarg($command));
         $process->run();
 
         return $process->isSuccessful() && trim($process->getOutput()) !== '';
@@ -328,11 +335,11 @@ class ProcessImportFile implements ShouldQueue
         if (! $process->isSuccessful()) {
             $this->logError('pdftotext failed', new \RuntimeException(trim($process->getErrorOutput()) ?: 'unknown'), [
                 'exit_code' => $process->getExitCode(),
-                'stderr'    => Str::limit($process->getErrorOutput(), 500),
-                'stdout'    => Str::limit($process->getOutput(), 200),
+                'stderr' => Str::limit($process->getErrorOutput(), 500),
+                'stdout' => Str::limit($process->getOutput(), 200),
             ]);
 
-            throw new \RuntimeException('No se pudo leer el PDF: ' . $process->getErrorOutput());
+            throw new \RuntimeException('No se pudo leer el PDF: '.$process->getErrorOutput());
         }
 
         return $process->getOutput();
@@ -347,7 +354,7 @@ class ProcessImportFile implements ShouldQueue
                 'path' => $path,
             ]);
 
-            throw new \RuntimeException('No se pudo abrir la planilla Excel: ' . $e->getMessage(), 0, $e);
+            throw new \RuntimeException('No se pudo abrir la planilla Excel: '.$e->getMessage(), 0, $e);
         }
 
         $lines = [];
@@ -401,7 +408,7 @@ class ProcessImportFile implements ShouldQueue
             return trim((string) $cell);
         }
 
-        if ($cell instanceof \PhpOffice\PhpSpreadsheet\RichText\RichText) {
+        if ($cell instanceof RichText) {
             return trim($cell->getPlainText());
         }
 
@@ -435,7 +442,7 @@ class ProcessImportFile implements ShouldQueue
 
     private function callOpenAiApi(string $text, string $context): array
     {
-        $instructions = <<<PROMPT
+        $instructions = <<<'PROMPT'
         Sos un asistente que extrae productos de listas de precios de ferretería a partir de texto plano sacado de un PDF o de una planilla Excel (puede tener columnas, secciones por rubro, precios con o sin IVA, etc.).
 
         Devolvé ÚNICAMENTE un objeto JSON con esta estructura exacta:
@@ -464,9 +471,9 @@ class ProcessImportFile implements ShouldQueue
         PROMPT;
 
         $payload = [
-            'model'           => config('services.openai.model'),
+            'model' => config('services.openai.model'),
             'response_format' => ['type' => 'json_object'],
-            'messages'        => [
+            'messages' => [
                 ['role' => 'system', 'content' => $instructions],
                 ['role' => 'user',   'content' => $text],
             ],
@@ -477,36 +484,36 @@ class ProcessImportFile implements ShouldQueue
             ->timeout(180)
             ->retry(3, 8000, function (\Throwable $e): bool {
                 // Reintentar solo en timeouts y errores de red, no en 4xx (auth, rate limit, etc.)
-                return $e instanceof \Illuminate\Http\Client\ConnectionException;
+                return $e instanceof ConnectionException;
             }, throw: false)
             ->post('https://api.openai.com/v1/chat/completions', $payload);
 
         if ($response->failed()) {
             $status = $response->status();
-            $body   = $response->json('error.message') ?? $response->body();
+            $body = $response->json('error.message') ?? $response->body();
 
             $this->logError(
                 'OpenAI API request failed',
                 new \RuntimeException((string) $body),
                 [
-                    'context'       => $context,
-                    'http_status'   => $status,
+                    'context' => $context,
+                    'http_status' => $status,
                     'response_body' => Str::limit((string) $body, 500),
-                    'model'         => config('services.openai.model'),
+                    'model' => config('services.openai.model'),
                 ]
             );
 
-            throw new \RuntimeException("Error en la API de OpenAI ({$status}): " . Str::limit($body, 300));
+            throw new \RuntimeException("Error en la API de OpenAI ({$status}): ".Str::limit($body, 300));
         }
 
-        $promptTokens     = (int) $response->json('usage.prompt_tokens', 0);
+        $promptTokens = (int) $response->json('usage.prompt_tokens', 0);
         $completionTokens = (int) $response->json('usage.completion_tokens', 0);
-        $estimatedCost    = $promptTokens / 1_000_000 * self::OPENAI_INPUT_COST_PER_MILLION_TOKENS;
+        $estimatedCost = $promptTokens / 1_000_000 * self::OPENAI_INPUT_COST_PER_MILLION_TOKENS;
 
-        (new DiscordNotifier())->notifyOpenAiUsage($context, $promptTokens, $completionTokens, $estimatedCost);
+        (new DiscordNotifier)->notifyOpenAiUsage($context, $promptTokens, $completionTokens, $estimatedCost);
 
         $content = (string) $response->json('choices.0.message.content', '');
-        $data    = json_decode($content, true);
+        $data = json_decode($content, true);
 
         if (! is_array($data) || ! isset($data['products']) || ! is_array($data['products'])) {
             throw new \RuntimeException('La IA no devolvió un JSON válido.');
@@ -521,9 +528,9 @@ class ProcessImportFile implements ShouldQueue
 
     private function filterText(string $text): string
     {
-        $lines     = explode("\n", $text);
+        $lines = explode("\n", $text);
         $frequency = [];
-        $result    = [];
+        $result = [];
 
         foreach ($lines as $line) {
             $key = mb_strtolower(trim($line));
@@ -556,7 +563,7 @@ class ProcessImportFile implements ShouldQueue
 
     private function chunkText(string $text): array
     {
-        $chunks    = [];
+        $chunks = [];
         $remaining = trim($text);
 
         while (mb_strlen($remaining) > 0 && count($chunks) < self::MAX_CHUNKS) {
@@ -565,14 +572,14 @@ class ProcessImportFile implements ShouldQueue
                 break;
             }
 
-            $slice       = mb_substr($remaining, 0, self::CHUNK_SIZE);
+            $slice = mb_substr($remaining, 0, self::CHUNK_SIZE);
             $lastNewline = mb_strrpos($slice, "\n");
 
             if ($lastNewline !== false && $lastNewline > self::CHUNK_SIZE * 0.6) {
                 $slice = mb_substr($remaining, 0, $lastNewline + 1);
             }
 
-            $chunks[]  = trim($slice);
+            $chunks[] = trim($slice);
             $remaining = trim(mb_substr($remaining, mb_strlen($slice)));
         }
 
@@ -589,7 +596,7 @@ class ProcessImportFile implements ShouldQueue
 
         return collect($extracted)->map(function (array $item) use ($categories) {
             $categoryName = $item['category'] ?? null;
-            $categoryId   = null;
+            $categoryId = null;
 
             if ($categoryName) {
                 foreach ($categories as $name => $id) {
@@ -602,23 +609,24 @@ class ProcessImportFile implements ShouldQueue
             }
 
             return [
-                'selected'            => true,
-                'action'              => 'create',
-                'name'                => $item['name'] ?? '',
-                'sku'                 => $item['sku'] ?? null,
-                'barcode'             => $item['barcode'] ?? null,
-                'unit'                => $this->normalizeUnit($item['unit'] ?? null),
-                'cost_price'          => (float) ($item['cost_price'] ?? 0),
-                'sale_price'          => (float) ($item['sale_price'] ?? 0),
-                'stock'               => 0,
-                'min_stock'           => 0,
-                'category_raw'        => $categoryName,
-                'category_id'         => $categoryId,
-                'duplicate'           => null,
+                'selected' => true,
+                'action' => 'create',
+                'name' => $item['name'] ?? '',
+                'sku' => $item['sku'] ?? null,
+                'barcode' => $item['barcode'] ?? null,
+                'unit' => $this->normalizeUnit($item['unit'] ?? null),
+                'cost_price' => (float) ($item['cost_price'] ?? 0),
+                'sale_price' => (float) ($item['sale_price'] ?? 0),
+                'stock' => 0,
+                'min_stock' => 0,
+                'category_raw' => $categoryName,
+                'category_id' => $categoryId,
+                'duplicate' => null,
                 'existing_product_id' => null,
-                'existing_cost'       => null,
-                'existing_sale'       => null,
-                'price_direction'     => null,
+                'existing_cost' => null,
+                'existing_sale' => null,
+                'existing_margin' => null,
+                'price_direction' => null,
             ];
         })->values()->all();
     }
@@ -626,15 +634,16 @@ class ProcessImportFile implements ShouldQueue
     private function detectDuplicates(array $rows): array
     {
         $existingProducts = Product::query()
-            ->select(['id', 'name', 'barcode', 'cost_price', 'sale_price'])
+            ->select(['id', 'name', 'barcode', 'cost_price', 'sale_price', 'margin_percentage'])
             ->get();
 
         $existingByKey = $existingProducts->reduce(function (array $carry, Product $product) {
             $entry = [
-                'id'         => $product->id,
-                'name'       => $product->name,
+                'id' => $product->id,
+                'name' => $product->name,
                 'cost_price' => (float) $product->cost_price,
                 'sale_price' => (float) $product->sale_price,
+                'margin' => (float) $product->margin_percentage,
             ];
 
             if ($product->barcode) {
@@ -647,21 +656,21 @@ class ProcessImportFile implements ShouldQueue
         }, ['barcode' => [], 'name' => []]);
 
         $seenBarcodes = [];
-        $seenNames    = [];
+        $seenNames = [];
 
         foreach ($rows as &$row) {
             $barcode = $row['barcode'] ? mb_strtolower(trim($row['barcode'])) : null;
-            $name    = mb_strtolower(trim($row['name']));
+            $name = mb_strtolower(trim($row['name']));
 
             $existingEntry = null;
-            $reason        = null;
+            $reason = null;
 
             if ($barcode && isset($existingByKey['barcode'][$barcode])) {
                 $existingEntry = $existingByKey['barcode'][$barcode];
-                $reason        = "Ya existe con este código de barras: \"{$existingEntry['name']}\"";
+                $reason = "Ya existe con este código de barras: \"{$existingEntry['name']}\"";
             } elseif (isset($existingByKey['name'][$name])) {
                 $existingEntry = $existingByKey['name'][$name];
-                $reason        = 'Ya existe un producto con este nombre';
+                $reason = 'Ya existe un producto con este nombre';
             } elseif ($barcode && isset($seenBarcodes[$barcode])) {
                 $reason = 'Código de barras repetido dentro de este archivo';
             } elseif (isset($seenNames[$name])) {
@@ -678,13 +687,25 @@ class ProcessImportFile implements ShouldQueue
             if ($existingEntry) {
                 $existingCost = $existingEntry['cost_price'];
                 $existingSale = $existingEntry['sale_price'];
-                $newCost      = (float) $row['cost_price'];
+                $newCost = (float) $row['cost_price'];
+                $margin = (float) ($existingEntry['margin'] ?? 0);
+
+                if ($margin <= 0) {
+                    $margin = PriceRounding::marginFromPrices($existingCost, $existingSale);
+                }
 
                 $row['existing_product_id'] = $existingEntry['id'];
-                $row['existing_cost']       = $existingCost;
-                $row['existing_sale']       = $existingSale;
-                $row['action']              = 'update';
-                $row['selected']            = true;
+                $row['existing_cost'] = $existingCost;
+                $row['existing_sale'] = $existingSale;
+                $row['existing_margin'] = $margin;
+                $row['action'] = 'update';
+                $row['selected'] = true;
+
+                if ($newCost > 0 && $margin > 0) {
+                    $row['sale_price'] = PriceRounding::saleFromCost($newCost, $margin);
+                } elseif ((float) $row['sale_price'] <= 0) {
+                    $row['sale_price'] = $existingSale;
+                }
 
                 if ($existingCost > 0 && abs($newCost - $existingCost) > 0.001) {
                     $row['price_direction'] = $newCost > $existingCost ? 'up' : 'down';

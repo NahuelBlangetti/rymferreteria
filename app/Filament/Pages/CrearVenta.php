@@ -8,6 +8,7 @@ use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\StockMovement;
 use App\Services\Tickets\SaleTicketEscPosBuilder;
+use App\Support\PaymentMethods;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -31,15 +32,21 @@ class CrearVenta extends Page
     protected string $view = 'filament.pages.crear-venta';
 
     // Búsqueda / escáner unificado
-    public string $productQuery  = '';
-    public array  $searchResults = [];
+    public string $productQuery = '';
+
+    public array $searchResults = [];
 
     // Carrito
     public array $cartItems = [];
 
-    // Pago
-    public string $paymentMethod = '';
+    // Pago: uno o más medios. Si hay más de uno, paymentAmounts guarda el monto de cada parte.
+    public array $selectedPaymentMethods = [];
+
+    /** @var array<string, float|int|string> */
+    public array $paymentAmounts = [];
+
     public string $notes = '';
+
     public bool $printTicket = true;
 
     // Número de venta creada (para confirmación)
@@ -136,7 +143,7 @@ class CrearVenta extends Page
 
     private function resetProductSearch(): void
     {
-        $this->productQuery  = '';
+        $this->productQuery = '';
         $this->searchResults = [];
     }
 
@@ -173,7 +180,7 @@ class CrearVenta extends Page
                 return;
             }
 
-            $newQty         = $this->cartItems[$existingIndex]['quantity'] + 1;
+            $newQty = $this->cartItems[$existingIndex]['quantity'] + 1;
             $availableStock = $this->cartItems[$existingIndex]['stock'];
 
             if ($newQty > $availableStock) {
@@ -187,7 +194,7 @@ class CrearVenta extends Page
             }
 
             $this->cartItems[$existingIndex]['quantity'] = $newQty;
-            $this->cartItems[$existingIndex]['subtotal']  = $newQty * $this->cartItems[$existingIndex]['unit_price'];
+            $this->cartItems[$existingIndex]['subtotal'] = $newQty * $this->cartItems[$existingIndex]['unit_price'];
         } else {
             if ($product->stock <= 0) {
                 Notification::make()
@@ -200,14 +207,14 @@ class CrearVenta extends Page
             }
 
             $this->cartItems[] = [
-                'product_id'   => $product->id,
-                'name'         => $product->name,
-                'unit'         => $product->unit,
+                'product_id' => $product->id,
+                'name' => $product->name,
+                'unit' => $product->unit,
                 'is_fractional' => $product->isFractional(),
-                'unit_price'   => (float) $product->sale_price,
-                'quantity'     => 1,
-                'subtotal'     => (float) $product->sale_price,
-                'stock'        => (float) $product->stock,
+                'unit_price' => (float) $product->sale_price,
+                'quantity' => 1,
+                'subtotal' => (float) $product->sale_price,
+                'stock' => (float) $product->stock,
             ];
         }
 
@@ -230,8 +237,8 @@ class CrearVenta extends Page
     public function updateQuantity(int $index, mixed $quantity): void
     {
         $isFractional = $this->cartItems[$index]['is_fractional'] ?? false;
-        $qty          = round((float) str_replace(',', '.', (string) $quantity), 3);
-        $qty          = $isFractional ? $qty : (float) (int) $qty;
+        $qty = round((float) str_replace(',', '.', (string) $quantity), 3);
+        $qty = $isFractional ? $qty : (float) (int) $qty;
 
         if ($qty <= 0) {
             $this->removeFromCart($index);
@@ -257,10 +264,143 @@ class CrearVenta extends Page
 
     public function clearCart(): void
     {
-        $this->cartItems    = [];
-        $this->paymentMethod = '';
-        $this->notes         = '';
+        $this->cartItems = [];
+        $this->resetPayment();
+        $this->notes = '';
         $this->lastSaleNumber = null;
+    }
+
+    public function togglePaymentMethod(string $method): void
+    {
+        if (! in_array($method, PaymentMethods::METHODS, true)) {
+            return;
+        }
+
+        if (in_array($method, $this->selectedPaymentMethods, true)) {
+            $this->selectedPaymentMethods = array_values(array_filter(
+                $this->selectedPaymentMethods,
+                fn (string $selected): bool => $selected !== $method
+            ));
+            unset($this->paymentAmounts[$method]);
+        } else {
+            $this->selectedPaymentMethods[] = $method;
+        }
+
+        $this->redistributePaymentAmounts();
+    }
+
+    public function splitPaymentEqually(): void
+    {
+        $this->redistributePaymentAmounts();
+    }
+
+    public function updatedPaymentAmounts(mixed $value, string $key): void
+    {
+        if (count($this->selectedPaymentMethods) !== 2) {
+            return;
+        }
+
+        $other = collect($this->selectedPaymentMethods)
+            ->first(fn (string $method): bool => $method !== $key);
+
+        if ($other === null) {
+            return;
+        }
+
+        $this->paymentAmounts[$other] = round($this->getSubtotal() - (float) str_replace(',', '.', (string) $value), 2);
+    }
+
+    public function isPaymentMethodSelected(string $method): bool
+    {
+        return in_array($method, $this->selectedPaymentMethods, true);
+    }
+
+    public function getPaymentPartsTotal(): float
+    {
+        return round(collect($this->selectedPaymentMethods)
+            ->sum(fn (string $method): float => (float) ($this->paymentAmounts[$method] ?? 0)), 2);
+    }
+
+    public function paymentCoversTotal(): bool
+    {
+        if ($this->selectedPaymentMethods === []) {
+            return false;
+        }
+
+        if (count($this->selectedPaymentMethods) === 1) {
+            return true;
+        }
+
+        foreach ($this->selectedPaymentMethods as $method) {
+            if ((float) ($this->paymentAmounts[$method] ?? 0) <= 0) {
+                return false;
+            }
+        }
+
+        return abs($this->getPaymentPartsTotal() - $this->getSubtotal()) < 0.01;
+    }
+
+    /**
+     * @return list<array{method: string, amount: float}>
+     */
+    public function resolvedPaymentParts(): array
+    {
+        $total = round($this->getSubtotal(), 2);
+
+        if (count($this->selectedPaymentMethods) === 1) {
+            return [[
+                'method' => $this->selectedPaymentMethods[0],
+                'amount' => $total,
+            ]];
+        }
+
+        $parts = [];
+
+        foreach ($this->selectedPaymentMethods as $method) {
+            $parts[] = [
+                'method' => $method,
+                'amount' => round((float) ($this->paymentAmounts[$method] ?? 0), 2),
+            ];
+        }
+
+        return $parts;
+    }
+
+    private function resetPayment(): void
+    {
+        $this->selectedPaymentMethods = [];
+        $this->paymentAmounts = [];
+    }
+
+    private function redistributePaymentAmounts(): void
+    {
+        $methods = $this->selectedPaymentMethods;
+        $count = count($methods);
+        $this->paymentAmounts = array_intersect_key($this->paymentAmounts, array_flip($methods));
+
+        if ($count === 0) {
+            return;
+        }
+
+        $total = round($this->getSubtotal(), 2);
+
+        if ($count === 1) {
+            $this->paymentAmounts[$methods[0]] = $total;
+
+            return;
+        }
+
+        $share = round($total / $count, 2);
+        $assigned = 0.0;
+
+        foreach ($methods as $index => $method) {
+            if ($index === $count - 1) {
+                $this->paymentAmounts[$method] = round($total - $assigned, 2);
+            } else {
+                $this->paymentAmounts[$method] = $share;
+                $assigned += $share;
+            }
+        }
     }
 
     // ── Confirmar venta ───────────────────────────────────────────────
@@ -273,11 +413,26 @@ class CrearVenta extends Page
             return;
         }
 
-        if (empty($this->paymentMethod)) {
+        if ($this->selectedPaymentMethods === []) {
             Notification::make()->title('Seleccioná un método de pago')->warning()->send();
 
             return;
         }
+
+        if (! $this->paymentCoversTotal()) {
+            Notification::make()
+                ->title('El pago mixto no cubre el total')
+                ->body('La suma de las partes tiene que ser igual al total de la venta.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $paymentParts = $this->resolvedPaymentParts();
+        $paymentMethod = count($paymentParts) > 1
+            ? PaymentMethods::MIXED
+            : $paymentParts[0]['method'];
 
         $cashRegister = CashRegister::where('status', 'open')->first();
 
@@ -295,7 +450,7 @@ class CrearVenta extends Page
         $sale = null;
 
         try {
-            DB::transaction(function () use ($cashRegister, &$sale) {
+            DB::transaction(function () use ($cashRegister, $paymentMethod, $paymentParts, &$sale) {
                 // Lock all products upfront and validate stock before crear nada
                 $products = [];
 
@@ -306,8 +461,8 @@ class CrearVenta extends Page
                         $available = $product ? $product->stock : 0;
 
                         throw new \RuntimeException(
-                            "Stock insuficiente para \"{$item['name']}\". " .
-                            "Disponible: {$available} {$item['unit']}. " .
+                            "Stock insuficiente para \"{$item['name']}\". ".
+                            "Disponible: {$available} {$item['unit']}. ".
                             "En carrito: {$item['quantity']}."
                         );
                     }
@@ -318,45 +473,47 @@ class CrearVenta extends Page
                 $subtotal = $this->getSubtotal();
 
                 $sale = Sale::create([
-                    'user_id'          => Auth::id(),
+                    'user_id' => Auth::id(),
                     'cash_register_id' => $cashRegister->id,
-                    'payment_method'   => $this->paymentMethod,
-                    'subtotal'         => $subtotal,
-                    'discount'         => 0,
-                    'total'            => $subtotal,
-                    'notes'            => $this->notes,
-                    'status'           => 'completed',
+                    'payment_method' => $paymentMethod,
+                    'subtotal' => $subtotal,
+                    'discount' => 0,
+                    'total' => $subtotal,
+                    'notes' => $this->notes,
+                    'status' => 'completed',
                 ]);
 
                 foreach ($this->cartItems as $item) {
                     $product = $products[$item['product_id']];
 
                     SaleItem::create([
-                        'sale_id'      => $sale->id,
-                        'product_id'   => $item['product_id'],
+                        'sale_id' => $sale->id,
+                        'product_id' => $item['product_id'],
                         'product_name' => $item['name'],
-                        'sku'          => $product->sku,
-                        'barcode'      => $product->barcode,
-                        'unit_price'   => $item['unit_price'],
-                        'quantity'     => $item['quantity'],
-                        'subtotal'     => $item['subtotal'],
+                        'sku' => $product->sku,
+                        'barcode' => $product->barcode,
+                        'unit_price' => $item['unit_price'],
+                        'quantity' => $item['quantity'],
+                        'subtotal' => $item['subtotal'],
                     ]);
 
                     $stockBefore = $product->stock;
                     $product->decrement('stock', $item['quantity']);
 
                     StockMovement::create([
-                        'product_id'     => $product->id,
-                        'user_id'        => Auth::id(),
-                        'type'           => 'out',
-                        'quantity'       => $item['quantity'],
-                        'stock_before'   => $stockBefore,
-                        'stock_after'    => $stockBefore - $item['quantity'],
-                        'notes'          => "Venta {$sale->sale_number}",
+                        'product_id' => $product->id,
+                        'user_id' => Auth::id(),
+                        'type' => 'out',
+                        'quantity' => $item['quantity'],
+                        'stock_before' => $stockBefore,
+                        'stock_after' => $stockBefore - $item['quantity'],
+                        'notes' => "Venta {$sale->sale_number}",
                         'reference_type' => Sale::class,
-                        'reference_id'   => $sale->id,
+                        'reference_id' => $sale->id,
                     ]);
                 }
+
+                $sale->storePayments($paymentParts);
 
                 $this->lastSaleNumber = $sale->sale_number;
             });
@@ -370,9 +527,9 @@ class CrearVenta extends Page
             return;
         }
 
-        $this->cartItems     = [];
-        $this->paymentMethod = '';
-        $this->notes         = '';
+        $this->cartItems = [];
+        $this->resetPayment();
+        $this->notes = '';
 
         if ($this->printTicket) {
             $ticket = app(SaleTicketEscPosBuilder::class)->build($sale);
