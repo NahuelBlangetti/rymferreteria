@@ -139,6 +139,7 @@ class PaymentSurchargePosTest extends TestCase
             ->test(PaymentSurchargeSettings::class)
             ->fillForm([
                 'cash_percentage' => 0,
+                'percentage_mode' => 'per_method',
                 'transfer_percentage' => 5,
                 'debit_percentage' => 8,
                 'credit_percentage' => 15,
@@ -153,6 +154,30 @@ class PaymentSurchargePosTest extends TestCase
         $this->assertEquals(5.0, (float) $settings->transfer_percentage);
         $this->assertEquals(8.0, (float) $settings->debit_percentage);
         $this->assertEquals(15.0, (float) $settings->credit_percentage);
+    }
+
+    public function test_settings_page_can_apply_one_percentage_to_all_non_cash_methods(): void
+    {
+        $user = $this->user();
+
+        Livewire::actingAs($user)
+            ->test(PaymentSurchargeSettings::class)
+            ->fillForm([
+                'cash_percentage' => 0,
+                'percentage_mode' => 'non_cash',
+                'non_cash_percentage' => 12,
+                'rounding_step' => 0,
+                'rounding_mode' => 'up',
+            ])
+            ->call('save');
+
+        PaymentSurchargeSetting::forgetCache();
+        $settings = PaymentSurchargeSetting::current();
+
+        $this->assertEquals(0.0, (float) $settings->cash_percentage);
+        $this->assertEquals(12.0, (float) $settings->transfer_percentage);
+        $this->assertEquals(12.0, (float) $settings->debit_percentage);
+        $this->assertEquals(12.0, (float) $settings->credit_percentage);
     }
 
     public function test_product_pages_and_settings_render(): void

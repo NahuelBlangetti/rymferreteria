@@ -6,6 +6,7 @@ use App\Models\PaymentSurchargeSetting;
 use App\Support\PriceRounding;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
@@ -16,6 +17,7 @@ use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Exceptions\Halt;
 use Filament\Support\Icons\Heroicon;
@@ -44,14 +46,24 @@ class PaymentSurchargeSettings extends Page
 
     public function mount(): void
     {
-        $this->form->fill(PaymentSurchargeSetting::current()->only([
-            'cash_percentage',
-            'transfer_percentage',
-            'debit_percentage',
-            'credit_percentage',
-            'rounding_step',
-            'rounding_mode',
-        ]));
+        $settings = PaymentSurchargeSetting::current();
+        $transfer = (float) $settings->transfer_percentage;
+        $debit = (float) $settings->debit_percentage;
+        $credit = (float) $settings->credit_percentage;
+        $sameNonCash = $transfer === $debit && $debit === $credit;
+
+        $this->form->fill([
+            ...$settings->only([
+                'cash_percentage',
+                'transfer_percentage',
+                'debit_percentage',
+                'credit_percentage',
+                'rounding_step',
+                'rounding_mode',
+            ]),
+            'percentage_mode' => $sameNonCash ? 'non_cash' : 'per_method',
+            'non_cash_percentage' => $sameNonCash ? $transfer : max($transfer, $debit, $credit),
+        ]);
     }
 
     public function defaultForm(Schema $schema): Schema
@@ -77,6 +89,38 @@ class PaymentSurchargeSettings extends Page
                             ->step(0.01)
                             ->suffix('%')
                             ->default(0),
+                        Radio::make('percentage_mode')
+                            ->label('Transferencia, débito y crédito')
+                            ->options([
+                                'non_cash' => 'Un solo porcentaje para los tres',
+                                'per_method' => 'Un porcentaje distinto por cada medio',
+                            ])
+                            ->default('non_cash')
+                            ->live()
+                            ->columnSpanFull()
+                            ->afterStateUpdated(function (Set $set, Get $get, mixed $state): void {
+                                if ($state !== 'non_cash') {
+                                    return;
+                                }
+
+                                $set('non_cash_percentage', max(
+                                    (float) ($get('transfer_percentage') ?? 0),
+                                    (float) ($get('debit_percentage') ?? 0),
+                                    (float) ($get('credit_percentage') ?? 0),
+                                ));
+                            }),
+                        TextInput::make('non_cash_percentage')
+                            ->label('Porcentaje para transferencia, débito y crédito')
+                            ->numeric()
+                            ->required()
+                            ->minValue(0)
+                            ->maxValue(1000)
+                            ->step(0.01)
+                            ->suffix('%')
+                            ->default(0)
+                            ->columnSpanFull()
+                            ->visible(fn (Get $get): bool => $get('percentage_mode') !== 'per_method')
+                            ->dehydrated(fn (Get $get): bool => $get('percentage_mode') !== 'per_method'),
                         TextInput::make('transfer_percentage')
                             ->label('Transferencia')
                             ->numeric()
@@ -85,7 +129,9 @@ class PaymentSurchargeSettings extends Page
                             ->maxValue(1000)
                             ->step(0.01)
                             ->suffix('%')
-                            ->default(0),
+                            ->default(0)
+                            ->visible(fn (Get $get): bool => $get('percentage_mode') === 'per_method')
+                            ->dehydrated(fn (Get $get): bool => $get('percentage_mode') === 'per_method'),
                         TextInput::make('debit_percentage')
                             ->label('Débito')
                             ->numeric()
@@ -94,7 +140,9 @@ class PaymentSurchargeSettings extends Page
                             ->maxValue(1000)
                             ->step(0.01)
                             ->suffix('%')
-                            ->default(0),
+                            ->default(0)
+                            ->visible(fn (Get $get): bool => $get('percentage_mode') === 'per_method')
+                            ->dehydrated(fn (Get $get): bool => $get('percentage_mode') === 'per_method'),
                         TextInput::make('credit_percentage')
                             ->label('Crédito')
                             ->numeric()
@@ -103,7 +151,9 @@ class PaymentSurchargeSettings extends Page
                             ->maxValue(1000)
                             ->step(0.01)
                             ->suffix('%')
-                            ->default(0),
+                            ->default(0)
+                            ->visible(fn (Get $get): bool => $get('percentage_mode') === 'per_method')
+                            ->dehydrated(fn (Get $get): bool => $get('percentage_mode') === 'per_method'),
                     ]),
                 Section::make('Redondeo del valor final')
                     ->description('Se aplica después de calcular el valor de cada medio, para cotizar números redondos.')
@@ -133,6 +183,15 @@ class PaymentSurchargeSettings extends Page
         } catch (Halt) {
             return;
         }
+
+        if (($data['percentage_mode'] ?? 'non_cash') === 'non_cash') {
+            $percentage = (float) ($data['non_cash_percentage'] ?? 0);
+            $data['transfer_percentage'] = $percentage;
+            $data['debit_percentage'] = $percentage;
+            $data['credit_percentage'] = $percentage;
+        }
+
+        unset($data['percentage_mode'], $data['non_cash_percentage']);
 
         PaymentSurchargeSetting::current()->update($data);
         PaymentSurchargeSetting::forgetCache();
