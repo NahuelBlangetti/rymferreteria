@@ -87,10 +87,10 @@ class MixedPaymentTest extends TestCase
             ->call('addToCart', $product->id)
             ->call('togglePaymentMethod', 'cash')
             ->call('togglePaymentMethod', 'transfer')
-            ->call('togglePaymentMethod', 'card')
+            ->call('togglePaymentMethod', 'credit')
             ->set('paymentAmounts.cash', 100)
             ->set('paymentAmounts.transfer', 100)
-            ->set('paymentAmounts.card', 100)
+            ->set('paymentAmounts.credit', 100)
             ->call('confirmSale');
 
         $this->assertEquals(0, Sale::count());
@@ -107,16 +107,16 @@ class MixedPaymentTest extends TestCase
             ->test(CrearVenta::class)
             ->set('printTicket', false)
             ->call('addToCart', $product->id)
-            ->call('togglePaymentMethod', 'card')
+            ->call('togglePaymentMethod', 'credit')
             ->call('confirmSale');
 
         $sale = Sale::query()->first();
 
         $this->assertNotNull($sale);
-        $this->assertEquals(PaymentMethods::CARD, $sale->payment_method);
+        $this->assertEquals(PaymentMethods::CREDIT, $sale->payment_method);
         $this->assertCount(1, $sale->payments);
         $this->assertEquals(1000.0, (float) $sale->payments->first()->amount);
-        $this->assertEquals(PaymentMethods::CARD, $sale->payments->first()->method);
+        $this->assertEquals(PaymentMethods::CREDIT, $sale->payments->first()->method);
     }
 
     public function test_ticket_prints_each_part_of_a_mixed_payment(): void

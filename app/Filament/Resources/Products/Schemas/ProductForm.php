@@ -2,15 +2,20 @@
 
 namespace App\Filament\Resources\Products\Schemas;
 
+use App\Models\CashRegister;
+use App\Services\PaymentPriceCalculator;
+use App\Support\PaymentMethods;
 use App\Support\ProductBarcode;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
-use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Illuminate\Database\Eloquent\Model;
 
 class ProductForm
 {
@@ -30,7 +35,7 @@ class ProductForm
                             ->autofocus()
                             ->maxLength(ProductBarcode::MAX_LENGTH)
                             ->dehydrateStateUsing(fn (?string $state): ?string => ProductBarcode::normalize($state))
-                            ->rule(fn (?\Illuminate\Database\Eloquent\Model $record): ProductBarcode => new ProductBarcode($record?->getKey())),
+                            ->rule(fn (?Model $record): ProductBarcode => new ProductBarcode($record?->getKey())),
                         TextInput::make('sku')
                             ->label('SKU del proveedor')
                             ->placeholder('Código del proveedor')
@@ -67,14 +72,14 @@ class ProductForm
                             ->label('Unidad de medida')
                             ->options([
                                 'unidad' => 'Unidad',
-                                'metro'  => 'Metro',
-                                'm2'     => 'Metro cuadrado',
-                                'kg'     => 'Kilogramo',
-                                'g'      => 'Gramo',
-                                'litro'  => 'Litro',
-                                'caja'   => 'Caja',
-                                'rollo'  => 'Rollo',
-                                'par'    => 'Par',
+                                'metro' => 'Metro',
+                                'm2' => 'Metro cuadrado',
+                                'kg' => 'Kilogramo',
+                                'g' => 'Gramo',
+                                'litro' => 'Litro',
+                                'caja' => 'Caja',
+                                'rollo' => 'Rollo',
+                                'par' => 'Par',
                                 'docena' => 'Docena',
                             ])
                             ->default('unidad')
@@ -91,7 +96,7 @@ class ProductForm
                     ]),
 
                 Section::make('Precios y margen')
-                    ->description('Al cambiar el costo o el margen, el precio de venta se calcula automáticamente.')
+                    ->description('Al cambiar el costo o el margen, el precio de venta se calcula automáticamente. Abajo aparecen los valores finales por medio de pago.')
                     ->columns(2)
                     ->schema([
                         TextInput::make('cost_price')
@@ -102,7 +107,7 @@ class ProductForm
                             ->prefix('$')
                             ->live(debounce: 600)
                             ->afterStateUpdated(function (Get $get, Set $set, $state): void {
-                                $cost   = (float) $state;
+                                $cost = (float) $state;
                                 $margin = (float) ($get('margin_percentage') ?? 0);
                                 if ($cost > 0 && $margin > 0) {
                                     $set('sale_price', round($cost * (1 + $margin / 100), 2));
@@ -116,7 +121,7 @@ class ProductForm
                             ->suffix('%')
                             ->live(debounce: 600)
                             ->afterStateUpdated(function (Get $get, Set $set, $state): void {
-                                $cost   = (float) ($get('cost_price') ?? 0);
+                                $cost = (float) ($get('cost_price') ?? 0);
                                 $margin = (float) $state;
                                 if ($cost > 0) {
                                     $set('sale_price', round($cost * (1 + $margin / 100), 2));
@@ -130,6 +135,7 @@ class ProductForm
                             ->prefix('$')
                             ->columnSpanFull()
                             ->live(debounce: 600)
+                            ->helperText('Precio de efectivo. Los otros medios se calculan abajo.')
                             ->afterStateUpdated(function (Get $get, Set $set, $state): void {
                                 $cost = (float) ($get('cost_price') ?? 0);
                                 $sale = (float) $state;
@@ -137,6 +143,20 @@ class ProductForm
                                     $set('margin_percentage', round(($sale / $cost - 1) * 100, 1));
                                 }
                             }),
+                        Text::make(function (Get $get): string {
+                            $sale = (float) ($get('sale_price') ?? 0);
+
+                            if ($sale <= 0) {
+                                return 'Cargá un precio de venta para ver los valores por medio de pago.';
+                            }
+
+                            $prices = app(PaymentPriceCalculator::class)->pricesFor($sale);
+
+                            return collect($prices)
+                                ->map(fn (float $price, string $method): string => PaymentMethods::label($method).': '.CashRegister::formatMoney($price))
+                                ->implode('  ·  ');
+                        })
+                            ->columnSpanFull(),
                     ]),
 
                 Section::make('Stock')

@@ -37,9 +37,17 @@ class SaleForm
 
                 Select::make('payment_method')
                     ->label('Medio de pago')
-                    ->options(fn ($record) => $record?->payment_method === PaymentMethods::MIXED
-                        ? PaymentMethods::labels()
-                        : PaymentMethods::options())
+                    ->options(function ($record) {
+                        $options = $record?->payment_method === PaymentMethods::MIXED
+                            ? PaymentMethods::labels()
+                            : PaymentMethods::options();
+
+                        if ($record?->payment_method === PaymentMethods::CARD) {
+                            $options[PaymentMethods::CARD] = PaymentMethods::label(PaymentMethods::CARD);
+                        }
+
+                        return $options;
+                    })
                     ->required()
                     ->disabled($isCompleted),
 

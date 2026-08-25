@@ -71,10 +71,28 @@ class CloseCashRegisterAction
                         ->helperText('No forma parte del arqueo en efectivo.');
                 }
 
-                if ($register && $register->cardSalesTotal() > 0) {
+                if ($register && $register->debitSalesTotal() > 0) {
+                    $fields[] = TextInput::make('debit_sales_preview')
+                        ->label('Ventas con débito')
+                        ->default(CashRegister::formatMoney($register->debitSalesTotal()))
+                        ->disabled()
+                        ->dehydrated(false)
+                        ->helperText('No forma parte del arqueo en efectivo.');
+                }
+
+                if ($register && $register->creditSalesTotal() > 0) {
+                    $fields[] = TextInput::make('credit_sales_preview')
+                        ->label('Ventas con crédito')
+                        ->default(CashRegister::formatMoney($register->creditSalesTotal()))
+                        ->disabled()
+                        ->dehydrated(false)
+                        ->helperText('No forma parte del arqueo en efectivo.');
+                }
+
+                if ($register && $register->salesTotalByPaymentMethod('card') > 0) {
                     $fields[] = TextInput::make('card_sales_preview')
                         ->label('Ventas con tarjeta')
-                        ->default(CashRegister::formatMoney($register->cardSalesTotal()))
+                        ->default(CashRegister::formatMoney($register->salesTotalByPaymentMethod('card')))
                         ->disabled()
                         ->dehydrated(false)
                         ->helperText('No forma parte del arqueo en efectivo.');

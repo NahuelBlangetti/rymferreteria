@@ -271,11 +271,12 @@
                     <div class="px-6 py-4 flex flex-col gap-4">
 
                         <p class="text-xs text-gray-500 dark:text-gray-400">
-                            Marcá uno o más medios. Si elegís dos o tres, se divide el total (pago mixto).
+                            Marcá uno o más medios. El total se actualiza según el medio elegido.
+                            Si hay más de uno, se usa el precio más alto de esos medios y se divide el total (pago mixto).
                         </p>
 
                         {{-- Botones de método de pago (se pueden marcar varios) --}}
-                        <div class="grid grid-cols-3 gap-2">
+                        <div class="grid grid-cols-2 gap-2">
                             <button
                                 wire:click="togglePaymentMethod('cash')"
                                 type="button"
@@ -303,16 +304,29 @@
                             </button>
 
                             <button
-                                wire:click="togglePaymentMethod('card')"
+                                wire:click="togglePaymentMethod('debit')"
                                 type="button"
                                 @class([
                                     'flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-4 text-sm font-semibold transition focus:outline-none',
-                                    'border-warning-500 bg-warning-50 text-warning-700 dark:bg-warning-950/40 dark:text-warning-300 dark:border-warning-600' => $this->isPaymentMethodSelected('card'),
-                                    'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300 hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:text-gray-300' => ! $this->isPaymentMethodSelected('card'),
+                                    'border-warning-500 bg-warning-50 text-warning-700 dark:bg-warning-950/40 dark:text-warning-300 dark:border-warning-600' => $this->isPaymentMethodSelected('debit'),
+                                    'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300 hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:text-gray-300' => ! $this->isPaymentMethodSelected('debit'),
                                 ])
                             >
                                 <x-filament::icon icon="heroicon-o-credit-card" class="h-6 w-6" />
-                                Tarjeta
+                                Débito
+                            </button>
+
+                            <button
+                                wire:click="togglePaymentMethod('credit')"
+                                type="button"
+                                @class([
+                                    'flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-4 text-sm font-semibold transition focus:outline-none',
+                                    'border-danger-500 bg-danger-50 text-danger-700 dark:bg-danger-950/40 dark:text-danger-300 dark:border-danger-600' => $this->isPaymentMethodSelected('credit'),
+                                    'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300 hover:bg-gray-100 dark:border-white/10 dark:bg-white/5 dark:text-gray-300' => ! $this->isPaymentMethodSelected('credit'),
+                                ])
+                            >
+                                <x-filament::icon icon="heroicon-o-credit-card" class="h-6 w-6" />
+                                Crédito
                             </button>
                         </div>
 
@@ -338,6 +352,8 @@
                                                 {{ match($method) {
                                                     'cash' => 'Efectivo',
                                                     'transfer' => 'Transferencia',
+                                                    'debit' => 'Débito',
+                                                    'credit' => 'Crédito',
                                                     'card' => 'Tarjeta',
                                                     default => $method,
                                                 } }}
@@ -426,6 +442,8 @@
                                         {{ match($selectedPaymentMethods[0]) {
                                             'cash'     => 'Efectivo',
                                             'transfer' => 'Transferencia',
+                                            'debit'    => 'Débito',
+                                            'credit'   => 'Crédito',
                                             'card'     => 'Tarjeta',
                                             default    => $selectedPaymentMethods[0],
                                         } }}
@@ -434,6 +452,8 @@
                                         ({{ collect($selectedPaymentMethods)->map(fn ($method) => match($method) {
                                             'cash' => 'Efectivo',
                                             'transfer' => 'Transferencia',
+                                            'debit' => 'Débito',
+                                            'credit' => 'Crédito',
                                             'card' => 'Tarjeta',
                                             default => $method,
                                         })->implode(' + ') }})

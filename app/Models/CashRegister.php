@@ -54,9 +54,21 @@ class CashRegister extends Model
         return $this->salesTotalByPaymentMethod('transfer');
     }
 
+    public function debitSalesTotal(): float
+    {
+        return $this->salesTotalByPaymentMethod('debit');
+    }
+
+    public function creditSalesTotal(): float
+    {
+        return $this->salesTotalByPaymentMethod('credit');
+    }
+
     public function cardSalesTotal(): float
     {
-        return $this->salesTotalByPaymentMethod('card');
+        return $this->salesTotalByPaymentMethod('card')
+            + $this->debitSalesTotal()
+            + $this->creditSalesTotal();
     }
 
     public function salesTotalByPaymentMethod(string $paymentMethod): float

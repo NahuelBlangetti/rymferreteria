@@ -29,6 +29,8 @@ class SaleTicketEscPosBuilder
     private const PAYMENT_LABELS = [
         'cash' => 'Efectivo',
         'transfer' => 'Transferencia',
+        'debit' => 'Débito',
+        'credit' => 'Crédito',
         'card' => 'Tarjeta',
     ];
 

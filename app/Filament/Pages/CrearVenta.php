@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\StockMovement;
+use App\Services\PaymentPriceCalculator;
 use App\Services\Tickets\SaleTicketEscPosBuilder;
 use App\Support\PaymentMethods;
 use BackedEnum;
@@ -138,7 +139,14 @@ class CrearVenta extends Page
             ->orderBy('name')
             ->limit(8)
             ->get(['id', 'name', 'sale_price', 'stock', 'unit', 'sku', 'barcode'])
-            ->toArray();
+            ->map(function (Product $product): array {
+                $row = $product->only(['id', 'name', 'sale_price', 'stock', 'unit', 'sku', 'barcode']);
+                $row['sale_price'] = $this->priceForCart((float) $product->sale_price);
+
+                return $row;
+            })
+            ->values()
+            ->all();
     }
 
     private function resetProductSearch(): void
@@ -206,14 +214,18 @@ class CrearVenta extends Page
                 return;
             }
 
+            $basePrice = (float) $product->sale_price;
+            $unitPrice = $this->priceForCart($basePrice);
+
             $this->cartItems[] = [
                 'product_id' => $product->id,
                 'name' => $product->name,
                 'unit' => $product->unit,
                 'is_fractional' => $product->isFractional(),
-                'unit_price' => (float) $product->sale_price,
+                'base_price' => $basePrice,
+                'unit_price' => $unitPrice,
                 'quantity' => 1,
-                'subtotal' => (float) $product->sale_price,
+                'subtotal' => $unitPrice,
                 'stock' => (float) $product->stock,
             ];
         }
@@ -286,7 +298,13 @@ class CrearVenta extends Page
             $this->selectedPaymentMethods[] = $method;
         }
 
+        $this->repriceCart();
         $this->redistributePaymentAmounts();
+
+        $query = trim($this->productQuery);
+        if (strlen($query) >= 2) {
+            $this->searchResults = $this->findProducts($query);
+        }
     }
 
     public function splitPaymentEqually(): void
@@ -370,6 +388,24 @@ class CrearVenta extends Page
     {
         $this->selectedPaymentMethods = [];
         $this->paymentAmounts = [];
+    }
+
+    private function priceForCart(float $basePrice): float
+    {
+        return app(PaymentPriceCalculator::class)
+            ->applyForMethods($basePrice, $this->selectedPaymentMethods);
+    }
+
+    private function repriceCart(): void
+    {
+        foreach ($this->cartItems as $index => $item) {
+            $basePrice = (float) ($item['base_price'] ?? $item['unit_price']);
+            $unitPrice = $this->priceForCart($basePrice);
+
+            $this->cartItems[$index]['base_price'] = $basePrice;
+            $this->cartItems[$index]['unit_price'] = $unitPrice;
+            $this->cartItems[$index]['subtotal'] = $unitPrice * (float) $item['quantity'];
+        }
     }
 
     private function redistributePaymentAmounts(): void

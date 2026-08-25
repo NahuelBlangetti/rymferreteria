@@ -8,6 +8,11 @@ class PaymentMethods
 
     public const TRANSFER = 'transfer';
 
+    public const DEBIT = 'debit';
+
+    public const CREDIT = 'credit';
+
+    /** Ventas anteriores a la separación débito/crédito. */
     public const CARD = 'card';
 
     public const MIXED = 'mixed';
@@ -15,7 +20,8 @@ class PaymentMethods
     public const METHODS = [
         self::CASH,
         self::TRANSFER,
-        self::CARD,
+        self::DEBIT,
+        self::CREDIT,
     ];
 
     public static function labels(): array
@@ -23,6 +29,8 @@ class PaymentMethods
         return [
             self::CASH => 'Efectivo',
             self::TRANSFER => 'Transferencia',
+            self::DEBIT => 'Débito',
+            self::CREDIT => 'Crédito',
             self::CARD => 'Tarjeta',
             self::MIXED => 'Mixto',
         ];
@@ -33,7 +41,8 @@ class PaymentMethods
         return [
             self::CASH => 'Efectivo',
             self::TRANSFER => 'Transferencia',
-            self::CARD => 'Tarjeta',
+            self::DEBIT => 'Débito',
+            self::CREDIT => 'Crédito',
         ];
     }
 
@@ -47,6 +56,8 @@ class PaymentMethods
         return match ($method) {
             self::CASH => 'success',
             self::TRANSFER => 'info',
+            self::DEBIT => 'warning',
+            self::CREDIT => 'danger',
             self::CARD => 'warning',
             self::MIXED => 'gray',
             default => 'gray',

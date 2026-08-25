@@ -23,15 +23,16 @@
     <table>
         <thead>
             <tr>
-                <th style="width:22%">Producto</th>
-                <th style="width:10%">Código</th>
-                <th style="width:12%">Categoría</th>
-                <th style="width:12%">Proveedor</th>
+                <th style="width:20%">Producto</th>
+                <th style="width:9%">Código</th>
+                <th style="width:10%">Categoría</th>
+                <th style="width:11%">Proveedor</th>
                 <th class="center" style="width:7%">Unidad</th>
-                <th class="right" style="width:10%">Costo</th>
-                <th class="right" style="width:10%">Venta</th>
-                <th class="center" style="width:8%">Margen</th>
-                <th class="center" style="width:9%">Stock</th>
+                <th class="right" style="width:9%">Costo</th>
+                <th class="right" style="width:9%">Venta</th>
+                <th class="center" style="width:7%">Margen</th>
+                <th class="center" style="width:8%">Stock</th>
+                <th class="center" style="width:10%">Cant. solicitada</th>
             </tr>
         </thead>
         <tbody>
@@ -103,12 +104,19 @@
                         @endif
                     </td>
                     <td class="center">
-                        <span class="badge {{ $stockClass }}">{{ $product->stock }}</span>
+                        <span class="badge {{ $stockClass }}">{{ \App\Models\Product::formatQuantity($product->stock) }}</span>
+                    </td>
+                    <td class="center">
+                        @if ($product->requested_quantity !== null)
+                            <span class="badge qty-requested">{{ \App\Models\Product::formatQuantity($product->requested_quantity) }}</span>
+                        @else
+                            <span class="no-data">—</span>
+                        @endif
                     </td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="9" class="center no-data" style="padding: 20px;">
+                    <td colspan="10" class="center no-data" style="padding: 20px;">
                         No hay productos para mostrar.
                     </td>
                 </tr>
@@ -117,7 +125,7 @@
     </table>
 
     @include('pdf.partials.footer', [
-        'footerNote' => 'Inventario para proveedores. Precios en pesos argentinos (ARS).',
+        'footerNote' => 'Pedido a proveedor. La cantidad solicitada es lo que se espera recibir. Precios en pesos argentinos (ARS).',
     ])
 
 </div>

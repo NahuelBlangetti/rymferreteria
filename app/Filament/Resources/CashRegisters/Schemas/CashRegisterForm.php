@@ -114,9 +114,19 @@ class CashRegisterForm
                             ->visible(fn (?CashRegister $record): bool => ($record?->transferSalesTotal() ?? 0) > 0)
                             ->columnSpanFull(),
 
+                        Text::make(fn (?CashRegister $record): string => 'Ventas con débito: '
+                            .CashRegister::formatMoney($record?->debitSalesTotal() ?? 0))
+                            ->visible(fn (?CashRegister $record): bool => ($record?->debitSalesTotal() ?? 0) > 0)
+                            ->columnSpanFull(),
+
+                        Text::make(fn (?CashRegister $record): string => 'Ventas con crédito: '
+                            .CashRegister::formatMoney($record?->creditSalesTotal() ?? 0))
+                            ->visible(fn (?CashRegister $record): bool => ($record?->creditSalesTotal() ?? 0) > 0)
+                            ->columnSpanFull(),
+
                         Text::make(fn (?CashRegister $record): string => 'Ventas con tarjeta: '
-                            .CashRegister::formatMoney($record?->cardSalesTotal() ?? 0))
-                            ->visible(fn (?CashRegister $record): bool => ($record?->cardSalesTotal() ?? 0) > 0)
+                            .CashRegister::formatMoney($record?->salesTotalByPaymentMethod('card') ?? 0))
+                            ->visible(fn (?CashRegister $record): bool => ($record?->salesTotalByPaymentMethod('card') ?? 0) > 0)
                             ->columnSpanFull(),
 
                         Text::make(fn (?CashRegister $record): string => 'Ingresos de caja: '

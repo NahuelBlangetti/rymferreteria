@@ -5,6 +5,8 @@ namespace App\Filament\Resources\Products\Tables;
 use App\Filament\Resources\Products\Actions\AdjustProductPricesAction;
 use App\Filament\Resources\Products\Actions\ExportProductsPdfAction;
 use App\Filament\Resources\Products\Actions\PrintLabelAction;
+use App\Models\Product;
+use App\Support\PaymentMethods;
 use App\Support\ProductBarcode;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -64,16 +66,16 @@ class ProductsTable
                     ->label('Unidad')
                     ->formatStateUsing(fn (string $state): string => match ($state) {
                         'unidad' => 'Unid.',
-                        'metro'  => 'Metro',
-                        'm2'     => 'm²',
-                        'kg'     => 'Kg',
-                        'g'      => 'Gr',
-                        'litro'  => 'Litro',
-                        'caja'   => 'Caja',
-                        'rollo'  => 'Rollo',
-                        'par'    => 'Par',
+                        'metro' => 'Metro',
+                        'm2' => 'm²',
+                        'kg' => 'Kg',
+                        'g' => 'Gr',
+                        'litro' => 'Litro',
+                        'caja' => 'Caja',
+                        'rollo' => 'Rollo',
+                        'par' => 'Par',
                         'docena' => 'Doc.',
-                        default  => $state,
+                        default => $state,
                     })
                     ->badge()
                     ->color('gray')
@@ -85,28 +87,43 @@ class ProductsTable
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('margin_percentage')
                     ->label('Margen')
-                    ->formatStateUsing(fn ($state): string => $state ? number_format($state, 1) . '%' : '—')
+                    ->formatStateUsing(fn ($state): string => $state ? number_format($state, 1).'%' : '—')
                     ->badge()
                     ->color(fn ($state): string => match (true) {
                         $state === null => 'gray',
-                        $state < 15     => 'danger',
-                        $state < 25     => 'warning',
-                        default         => 'success',
+                        $state < 15 => 'danger',
+                        $state < 25 => 'warning',
+                        default => 'success',
                     })
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('sale_price')
-                    ->label('Precio venta')
+                    ->label('Efectivo')
                     ->money('ARS')
                     ->sortable(),
+                TextColumn::make('transfer_price')
+                    ->label('Transferencia')
+                    ->state(fn (Product $record): float => $record->priceFor(PaymentMethods::TRANSFER))
+                    ->money('ARS')
+                    ->toggleable(),
+                TextColumn::make('debit_price')
+                    ->label('Débito')
+                    ->state(fn (Product $record): float => $record->priceFor(PaymentMethods::DEBIT))
+                    ->money('ARS')
+                    ->toggleable(),
+                TextColumn::make('credit_price')
+                    ->label('Crédito')
+                    ->state(fn (Product $record): float => $record->priceFor(PaymentMethods::CREDIT))
+                    ->money('ARS')
+                    ->toggleable(),
                 TextColumn::make('stock')
                     ->label('Stock')
                     ->formatStateUsing(fn ($state): string => rtrim(rtrim(number_format((float) $state, 3, ',', '.'), '0'), ','))
                     ->sortable()
                     ->badge()
                     ->color(fn ($state, $record): string => match (true) {
-                        (float) $state <= 0                   => 'danger',
+                        (float) $state <= 0 => 'danger',
                         (float) $state <= $record->min_stock => 'warning',
-                        default                                => 'success',
+                        default => 'success',
                     }),
             ])
             ->filters([

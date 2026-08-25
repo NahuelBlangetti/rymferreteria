@@ -134,6 +134,8 @@
     .margin-warning { background-color: #fef3c7; color: #92400e; }
     .margin-danger  { background-color: #fee2e2; color: #991b1b; }
 
+    .qty-requested { background-color: #ffedd5; color: #9a3412; font-weight: bold; }
+
     .price  { font-weight: bold; color: #1a1a1a; }
     .cost   { color: #6b7280; }
     .no-data { color: #aaa; font-style: italic; }
