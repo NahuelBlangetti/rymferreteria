@@ -135,7 +135,7 @@ class ProductForm
                             ->prefix('$')
                             ->columnSpanFull()
                             ->live(debounce: 600)
-                            ->helperText('Precio de efectivo. Los otros medios se calculan abajo.')
+                            ->helperText('Precio de efectivo y transferencia. Débito y crédito se calculan abajo.')
                             ->afterStateUpdated(function (Get $get, Set $set, $state): void {
                                 $cost = (float) ($get('cost_price') ?? 0);
                                 $sale = (float) $state;
@@ -150,10 +150,14 @@ class ProductForm
                                 return 'Cargá un precio de venta para ver los valores por medio de pago.';
                             }
 
-                            $prices = app(PaymentPriceCalculator::class)->pricesFor($sale);
+                            $calculator = app(PaymentPriceCalculator::class);
 
-                            return collect($prices)
-                                ->map(fn (float $price, string $method): string => PaymentMethods::label($method).': '.CashRegister::formatMoney($price))
+                            return collect([
+                                'Efectivo y transferencia' => PaymentMethods::CASH,
+                                'Débito' => PaymentMethods::DEBIT,
+                                'Crédito' => PaymentMethods::CREDIT,
+                            ])
+                                ->map(fn (string $method, string $label): string => $label.': '.CashRegister::formatMoney($calculator->apply($sale, $method)))
                                 ->implode('  ·  ');
                         })
                             ->columnSpanFull(),

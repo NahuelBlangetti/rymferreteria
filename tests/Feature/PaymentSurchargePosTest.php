@@ -139,8 +139,7 @@ class PaymentSurchargePosTest extends TestCase
             ->test(PaymentSurchargeSettings::class)
             ->fillForm([
                 'cash_percentage' => 0,
-                'percentage_mode' => 'per_method',
-                'transfer_percentage' => 5,
+                'cards_mode' => 'per_card',
                 'debit_percentage' => 8,
                 'credit_percentage' => 15,
                 'rounding_step' => 0,
@@ -151,12 +150,11 @@ class PaymentSurchargePosTest extends TestCase
         PaymentSurchargeSetting::forgetCache();
         $settings = PaymentSurchargeSetting::current();
 
-        $this->assertEquals(5.0, (float) $settings->transfer_percentage);
         $this->assertEquals(8.0, (float) $settings->debit_percentage);
         $this->assertEquals(15.0, (float) $settings->credit_percentage);
     }
 
-    public function test_settings_page_can_apply_one_percentage_to_all_non_cash_methods(): void
+    public function test_settings_page_can_apply_one_percentage_to_debit_and_credit(): void
     {
         $user = $this->user();
 
@@ -164,8 +162,8 @@ class PaymentSurchargePosTest extends TestCase
             ->test(PaymentSurchargeSettings::class)
             ->fillForm([
                 'cash_percentage' => 0,
-                'percentage_mode' => 'non_cash',
-                'non_cash_percentage' => 12,
+                'cards_mode' => 'same',
+                'cards_percentage' => 12,
                 'rounding_step' => 0,
                 'rounding_mode' => 'up',
             ])
@@ -175,9 +173,56 @@ class PaymentSurchargePosTest extends TestCase
         $settings = PaymentSurchargeSetting::current();
 
         $this->assertEquals(0.0, (float) $settings->cash_percentage);
-        $this->assertEquals(12.0, (float) $settings->transfer_percentage);
         $this->assertEquals(12.0, (float) $settings->debit_percentage);
         $this->assertEquals(12.0, (float) $settings->credit_percentage);
+    }
+
+    public function test_single_percentage_saves_even_if_the_per_card_fields_were_left_empty(): void
+    {
+        $user = $this->user();
+
+        Livewire::actingAs($user)
+            ->test(PaymentSurchargeSettings::class)
+            ->fillForm([
+                'cash_percentage' => 0,
+                'cards_mode' => 'same',
+                'cards_percentage' => 10,
+                'debit_percentage' => '',
+                'credit_percentage' => '',
+                'rounding_step' => 0,
+                'rounding_mode' => 'up',
+            ])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        PaymentSurchargeSetting::forgetCache();
+        $settings = PaymentSurchargeSetting::current();
+
+        $this->assertEquals(10.0, (float) $settings->debit_percentage);
+        $this->assertEquals(10.0, (float) $settings->credit_percentage);
+    }
+
+    public function test_transfer_is_always_charged_like_cash(): void
+    {
+        $user = $this->user();
+
+        Livewire::actingAs($user)
+            ->test(PaymentSurchargeSettings::class)
+            ->fillForm([
+                'cash_percentage' => 4,
+                'cards_mode' => 'same',
+                'cards_percentage' => 20,
+                'rounding_step' => 0,
+                'rounding_mode' => 'up',
+            ])
+            ->call('save');
+
+        PaymentSurchargeSetting::forgetCache();
+        $product = $this->product(1000);
+
+        $this->assertEquals(1040.0, $product->priceFor(PaymentMethods::CASH));
+        $this->assertEquals(1040.0, $product->priceFor(PaymentMethods::TRANSFER));
+        $this->assertEquals(1200.0, $product->priceFor(PaymentMethods::CREDIT));
     }
 
     public function test_product_pages_and_settings_render(): void

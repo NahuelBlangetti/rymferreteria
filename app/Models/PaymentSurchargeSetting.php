@@ -12,7 +12,6 @@ class PaymentSurchargeSetting extends Model
 
     protected $fillable = [
         'cash_percentage',
-        'transfer_percentage',
         'debit_percentage',
         'credit_percentage',
         'rounding_step',
@@ -21,7 +20,6 @@ class PaymentSurchargeSetting extends Model
 
     protected $casts = [
         'cash_percentage' => 'decimal:2',
-        'transfer_percentage' => 'decimal:2',
         'debit_percentage' => 'decimal:2',
         'credit_percentage' => 'decimal:2',
         'rounding_step' => 'integer',
@@ -33,7 +31,6 @@ class PaymentSurchargeSetting extends Model
             ['id' => 1],
             [
                 'cash_percentage' => 0,
-                'transfer_percentage' => 0,
                 'debit_percentage' => 0,
                 'credit_percentage' => 0,
                 'rounding_step' => 0,
@@ -47,11 +44,14 @@ class PaymentSurchargeSetting extends Model
         self::$cached = null;
     }
 
+    /**
+     * La transferencia se cobra igual que el efectivo (regla del negocio),
+     * así que comparten porcentaje.
+     */
     public function percentageFor(string $method): float
     {
         return match ($method) {
-            PaymentMethods::CASH => (float) $this->cash_percentage,
-            PaymentMethods::TRANSFER => (float) $this->transfer_percentage,
+            PaymentMethods::CASH, PaymentMethods::TRANSFER => (float) $this->cash_percentage,
             PaymentMethods::DEBIT => (float) $this->debit_percentage,
             PaymentMethods::CREDIT, PaymentMethods::CARD => (float) $this->credit_percentage,
             default => 0.0,

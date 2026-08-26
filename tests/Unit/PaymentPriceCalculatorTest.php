@@ -39,7 +39,7 @@ class PaymentPriceCalculatorTest extends TestCase
     public function test_mixed_methods_use_the_highest_percentage(): void
     {
         PaymentSurchargeSetting::current()->update([
-            'transfer_percentage' => 5,
+            'debit_percentage' => 8,
             'credit_percentage' => 15,
         ]);
         PaymentSurchargeSetting::forgetCache();
@@ -51,9 +51,22 @@ class PaymentPriceCalculatorTest extends TestCase
             $calculator->applyForMethods(1000, [PaymentMethods::CASH, PaymentMethods::CREDIT]),
         );
         $this->assertSame(
-            1050.0,
-            $calculator->applyForMethods(1000, [PaymentMethods::CASH, PaymentMethods::TRANSFER]),
+            1080.0,
+            $calculator->applyForMethods(1000, [PaymentMethods::DEBIT, PaymentMethods::TRANSFER]),
         );
+    }
+
+    public function test_transfer_shares_the_cash_percentage(): void
+    {
+        PaymentSurchargeSetting::current()->update([
+            'cash_percentage' => 5,
+        ]);
+        PaymentSurchargeSetting::forgetCache();
+
+        $calculator = app(PaymentPriceCalculator::class);
+
+        $this->assertSame(1050.0, $calculator->apply(1000, PaymentMethods::CASH));
+        $this->assertSame(1050.0, $calculator->apply(1000, PaymentMethods::TRANSFER));
     }
 
     public function test_rounds_the_final_price_after_applying_the_percentage(): void

@@ -97,14 +97,9 @@ class ProductsTable
                     })
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('sale_price')
-                    ->label('Efectivo')
+                    ->label('Efectivo y transferencia')
                     ->money('ARS')
                     ->sortable(),
-                TextColumn::make('transfer_price')
-                    ->label('Transferencia')
-                    ->state(fn (Product $record): float => $record->priceFor(PaymentMethods::TRANSFER))
-                    ->money('ARS')
-                    ->toggleable(),
                 TextColumn::make('debit_price')
                     ->label('Débito')
                     ->state(fn (Product $record): float => $record->priceFor(PaymentMethods::DEBIT))

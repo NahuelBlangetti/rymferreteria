@@ -12,7 +12,6 @@ return new class extends Migration
         Schema::create('payment_surcharge_settings', function (Blueprint $table) {
             $table->id();
             $table->decimal('cash_percentage', 6, 2)->default(0);
-            $table->decimal('transfer_percentage', 6, 2)->default(0);
             $table->decimal('debit_percentage', 6, 2)->default(0);
             $table->decimal('credit_percentage', 6, 2)->default(0);
             $table->unsignedInteger('rounding_step')->default(0);
@@ -23,7 +22,6 @@ return new class extends Migration
         DB::table('payment_surcharge_settings')->insert([
             'id' => 1,
             'cash_percentage' => 0,
-            'transfer_percentage' => 0,
             'debit_percentage' => 0,
             'credit_percentage' => 0,
             'rounding_step' => 0,
