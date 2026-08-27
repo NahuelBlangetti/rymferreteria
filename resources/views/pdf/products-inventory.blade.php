@@ -14,8 +14,18 @@
 <body>
 <div class="page">
 
+    @php
+        $supplierNames = $products->pluck('supplier.name')->filter()->unique();
+        $supplierLabel = match (true) {
+            $supplierNames->count() === 1 => 'Proveedor: '.$supplierNames->first(),
+            $supplierNames->count() > 1   => 'Varios proveedores',
+            default                        => null,
+        };
+    @endphp
+
     @include('pdf.partials.header', [
         'title'     => $pdfTitle,
+        'subtitle'  => $supplierLabel,
         'dateLabel' => now()->format('d/m/Y H:i') . ' hs.',
         'audience'  => 'Proveedores',
     ])
@@ -23,33 +33,13 @@
     <table>
         <thead>
             <tr>
-                <th style="width:20%">Producto</th>
-                <th style="width:9%">Código</th>
-                <th style="width:10%">Categoría</th>
-                <th style="width:11%">Proveedor</th>
-                <th class="center" style="width:7%">Unidad</th>
-                <th class="right" style="width:9%">Costo</th>
-                <th class="right" style="width:9%">Venta</th>
-                <th class="center" style="width:7%">Margen</th>
-                <th class="center" style="width:8%">Stock</th>
-                <th class="center" style="width:10%">Cant. solicitada</th>
+                <th style="width:55%">Producto</th>
+                <th style="width:25%">Código</th>
+                <th class="center" style="width:20%">Cant. solicitada</th>
             </tr>
         </thead>
         <tbody>
             @forelse ($products as $product)
-                @php
-                    $stockClass = match(true) {
-                        $product->stock <= 0                   => 'stock-danger',
-                        $product->stock <= $product->min_stock => 'stock-warning',
-                        default                                  => 'stock-ok',
-                    };
-                    $marginClass = match(true) {
-                        $product->margin_percentage === null => '',
-                        $product->margin_percentage < 15      => 'margin-danger',
-                        $product->margin_percentage < 25      => 'margin-warning',
-                        default                                => 'margin-ok',
-                    };
-                @endphp
                 <tr>
                     <td>{{ $product->name }}</td>
                     <td>
@@ -58,53 +48,6 @@
                         @else
                             <span class="no-data">—</span>
                         @endif
-                    </td>
-                    <td>
-                        @if ($product->category)
-                            <span class="badge">{{ $product->category->name }}</span>
-                        @else
-                            <span class="no-data">—</span>
-                        @endif
-                    </td>
-                    <td>
-                        @if ($product->supplier)
-                            {{ $product->supplier->name }}
-                        @else
-                            <span class="no-data">—</span>
-                        @endif
-                    </td>
-                    <td class="center">
-                        {{ match($product->unit) {
-                            'unidad' => 'Unid.',
-                            'metro'  => 'Metro',
-                            'm2'     => 'm²',
-                            'kg'     => 'Kg',
-                            'g'      => 'Gr',
-                            'litro'  => 'Litro',
-                            'caja'   => 'Caja',
-                            'rollo'  => 'Rollo',
-                            'par'    => 'Par',
-                            'docena' => 'Doc.',
-                            default  => $product->unit,
-                        } }}
-                    </td>
-                    <td class="right cost">
-                        ${{ number_format($product->cost_price, 2, ',', '.') }}
-                    </td>
-                    <td class="right price">
-                        ${{ number_format($product->sale_price, 2, ',', '.') }}
-                    </td>
-                    <td class="center">
-                        @if ($product->margin_percentage !== null)
-                            <span class="badge {{ $marginClass }}">
-                                {{ number_format($product->margin_percentage, 1) }}%
-                            </span>
-                        @else
-                            <span class="no-data">—</span>
-                        @endif
-                    </td>
-                    <td class="center">
-                        <span class="badge {{ $stockClass }}">{{ \App\Models\Product::formatQuantity($product->stock) }}</span>
                     </td>
                     <td class="center">
                         @if ($product->requested_quantity !== null)
@@ -116,7 +59,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="10" class="center no-data" style="padding: 20px;">
+                    <td colspan="3" class="center no-data" style="padding: 20px;">
                         No hay productos para mostrar.
                     </td>
                 </tr>

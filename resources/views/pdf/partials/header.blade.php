@@ -8,6 +8,9 @@
             <div class="store-tagline">{{ $store['tagline'] }}</div>
         @endif
         <div class="header-title">{{ $title }}</div>
+        @if ($subtitle ?? false)
+            <div class="header-subtitle">{{ $subtitle }}</div>
+        @endif
         <div class="header-subtitle">{{ $dateLabel }}</div>
         @if ($audience ?? false)
             <span class="audience-badge">Para {{ strtolower($audience) }}</span>
