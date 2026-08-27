@@ -34,7 +34,7 @@
         <thead>
             <tr>
                 <th style="width:55%">Producto</th>
-                <th style="width:25%">Código</th>
+                <th style="width:25%">SKU proveedor</th>
                 <th class="center" style="width:20%">Cant. solicitada</th>
             </tr>
         </thead>
@@ -43,8 +43,8 @@
                 <tr>
                     <td>{{ $product->name }}</td>
                     <td>
-                        @if ($product->barcode)
-                            <span class="badge">{{ $product->barcode }}</span>
+                        @if ($product->sku)
+                            <span class="badge">{{ $product->sku }}</span>
                         @else
                             <span class="no-data">—</span>
                         @endif
