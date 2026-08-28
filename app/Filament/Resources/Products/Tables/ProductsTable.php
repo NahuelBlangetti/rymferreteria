@@ -14,7 +14,6 @@ use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
-use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\Filter;
@@ -30,12 +29,6 @@ class ProductsTable
             ->recordUrl(null)
             ->recordAction('edit')
             ->columns([
-                ImageColumn::make('image')
-                    ->label('Imagen')
-                    ->disk('public')
-                    ->square()
-                    ->imageSize(48)
-                    ->toggleable(),
                 TextColumn::make('name')
                     ->label('Nombre')
                     ->searchable()

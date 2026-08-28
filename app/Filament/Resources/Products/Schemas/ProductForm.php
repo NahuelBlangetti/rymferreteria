@@ -6,7 +6,6 @@ use App\Models\CashRegister;
 use App\Services\PaymentPriceCalculator;
 use App\Support\PaymentMethods;
 use App\Support\ProductBarcode;
-use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -86,12 +85,6 @@ class ProductForm
                             ->required(),
                         Textarea::make('description')
                             ->label('Descripción')
-                            ->columnSpanFull(),
-                        FileUpload::make('image')
-                            ->label('Imagen')
-                            ->image()
-                            ->disk('public')
-                            ->directory('products')
                             ->columnSpanFull(),
                     ]),
 
