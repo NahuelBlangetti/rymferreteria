@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\Category;
+use App\Models\Product;
 use App\Models\ProductImport;
 use App\Models\Supplier;
 use App\Support\PriceRounding;
@@ -12,6 +13,7 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -104,7 +106,7 @@ class ValidarImport extends Page
         $this->importId = $import->id;
         $this->importedFileName = $import->filename;
         $this->importSupplierId = $import->supplier_id;
-        $this->products = $this->hydrateExistingSalePrices($import->products ?? []);
+        $this->products = $this->sortUpdatesFirst($this->hydrateExistingSalePrices($import->products ?? []));
 
         $this->categoryOptions = Category::query()->orderBy('name')->pluck('name', 'id')->all();
         $this->supplierOptions = Supplier::query()->where('active', true)->orderBy('name')->pluck('name', 'id')->all();
@@ -159,6 +161,22 @@ class ValidarImport extends Page
                 : 'Se mantuvo el margen actual, sin redondeo comercial.')
             ->success()
             ->send();
+    }
+
+    /**
+     * Las actualizaciones de productos ya conocidos van primero; las altas
+     * nuevas (que requieren revisar nombre, precio y categoría desde cero)
+     * quedan al final.
+     */
+    private function sortUpdatesFirst(array $products): array
+    {
+        usort(
+            $products,
+            fn (array $a, array $b) => (($a['action'] ?? 'create') === 'create' ? 1 : 0)
+                <=> (($b['action'] ?? 'create') === 'create' ? 1 : 0)
+        );
+
+        return $products;
     }
 
     /**
@@ -254,6 +272,18 @@ class ValidarImport extends Page
         $toUpdate = [];
         $invalidBarcodes = 0;
 
+        // Última verificación contra el estado actual de la base: si una fila
+        // quedó marcada como "nuevo" al revisar pero su sku o código de barras
+        // YA existe en el catálogo ahora (por ejemplo, un reimport de stock
+        // donde el nombre del producto cambió y el matching por nombre no lo
+        // reconoció), la tratamos como actualización de precio en vez de
+        // crear un producto duplicado.
+        $barcodesToCheck = $rows->map(fn (array $row) => ProductBarcode::normalize($row['barcode'] ?? null))->filter()->unique();
+        $skusToCheck = $rows->map(fn (array $row) => filled($row['sku'] ?? null) ? trim((string) $row['sku']) : null)->filter()->unique();
+
+        $existingByBarcode = Product::query()->whereIn('barcode', $barcodesToCheck)->pluck('id', 'barcode');
+        $existingBySku = Product::query()->whereIn('sku', $skusToCheck)->pluck('id', 'sku');
+
         // ProductBarcode::errorMessage() solo detecta duplicados contra lo
         // que ya está guardado en la base: dos filas de este mismo archivo
         // con el mismo código no se ven entre sí porque ninguna se insertó
@@ -269,9 +299,14 @@ class ValidarImport extends Page
             $cost = (float) $row['cost_price'];
             $sale = (float) $row['sale_price'];
             $barcode = ProductBarcode::normalize($row['barcode'] ?? null);
-            $ignoreId = (($row['action'] ?? 'create') === 'update' && ! empty($row['existing_product_id']))
-                ? (int) $row['existing_product_id']
-                : null;
+            $sku = filled($row['sku'] ?? null) ? trim((string) $row['sku']) : null;
+
+            $existingProductId = ! empty($row['existing_product_id'])
+                ? $row['existing_product_id']
+                : (($barcode !== null ? $existingByBarcode[$barcode] ?? null : null)
+                    ?? ($sku !== null ? $existingBySku[$sku] ?? null : null));
+
+            $ignoreId = $existingProductId ? (int) $existingProductId : null;
 
             if ($barcode !== null) {
                 if (isset($seenBarcodes[$barcode]) || ProductBarcode::errorMessage($barcode, $ignoreId) !== null) {
@@ -286,7 +321,7 @@ class ValidarImport extends Page
                 'category_id' => $row['category_id'] ?: null,
                 'supplier_id' => $supplierId,
                 'name' => $row['name'],
-                'sku' => filled($row['sku'] ?? null) ? trim((string) $row['sku']) : null,
+                'sku' => $sku,
                 'barcode' => $barcode,
                 'unit' => $this->normalizeUnit($row['unit'] ?? null),
                 'cost_price' => $cost,
@@ -297,8 +332,8 @@ class ValidarImport extends Page
                 'active' => true,
             ];
 
-            if (($row['action'] ?? 'create') === 'update' && ! empty($row['existing_product_id'])) {
-                $toUpdate[] = ['id' => $row['existing_product_id'], 'data' => $data];
+            if ($existingProductId) {
+                $toUpdate[] = ['id' => $existingProductId, 'data' => $data];
             } else {
                 $toInsert[] = array_merge($data, ['created_at' => $now, 'updated_at' => $now]);
             }
@@ -321,6 +356,15 @@ class ValidarImport extends Page
                         ->update(array_merge($item['data'], ['updated_at' => now()]));
                 }
             });
+        } catch (QueryException $e) {
+            Notification::make()
+                ->title('No se pudo guardar la importación')
+                ->body('El archivo tiene un SKU o código que ya existe en el catálogo o está repetido. Esto es un problema de los datos del archivo del proveedor, no del sistema: corregí ese código y volvé a intentar. No se guardó ningún producto de este lote.')
+                ->danger()
+                ->persistent()
+                ->send();
+
+            return;
         } catch (\Throwable $e) {
             Notification::make()
                 ->title('Error al guardar los productos')

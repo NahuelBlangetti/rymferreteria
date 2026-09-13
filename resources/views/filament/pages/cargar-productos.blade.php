@@ -1,4 +1,85 @@
 <x-filament-panels::page>
+    <div @if (count($processingImports) > 0) wire:poll.5s @endif class="contents">
+    @if (count($processingImports) > 0)
+        <div class="mb-6 overflow-hidden rounded-2xl border border-primary-200 bg-primary-50 shadow-sm dark:border-primary-500/20 dark:bg-primary-500/5">
+            <div class="flex items-center gap-3 border-b border-primary-200 bg-primary-100/60 px-5 py-3.5 dark:border-primary-500/20 dark:bg-primary-500/10">
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-500 text-white shadow-sm">
+                    <x-filament::loading-indicator class="h-4 w-4" />
+                </span>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-bold text-primary-800 dark:text-primary-300">
+                        {{ count($processingImports) === 1 ? '1 archivo en análisis' : count($processingImports) . ' archivos en análisis' }}
+                    </p>
+                    <p class="mt-0.5 text-xs text-primary-700 dark:text-primary-400">
+                        Si se traba, se cancela solo a los 15 minutos. También podés cancelarlo acá.
+                    </p>
+                </div>
+            </div>
+            <div class="divide-y divide-primary-100 dark:divide-primary-500/10">
+                @foreach ($processingImports as $pi)
+                    <div class="flex items-center gap-4 px-5 py-3.5">
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                                {{ $pi['filename'] }}
+                            </p>
+                            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                {{ ($pi['status'] ?? '') === 'pending' ? 'En cola…' : 'Analizando con IA…' }}
+                                · {{ \Carbon\Carbon::parse($pi['created_at'])->diffForHumans() }}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            wire:click="cancelProcessingImport({{ $pi['id'] }})"
+                            wire:confirm="¿Cancelar el análisis de este archivo?"
+                            class="inline-flex items-center justify-center rounded-xl border border-primary-300 bg-white px-3 py-2 text-sm font-medium text-primary-800 shadow-sm transition hover:bg-primary-100 dark:border-primary-500/30 dark:bg-transparent dark:text-primary-300"
+                        >
+                            Cancelar
+                        </button>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
+    @if (count($failedImports) > 0)
+        <div class="mb-6 overflow-hidden rounded-2xl border border-danger-200 bg-danger-50 shadow-sm dark:border-danger-500/20 dark:bg-danger-500/5">
+            <div class="flex items-center gap-3 border-b border-danger-200 bg-danger-100/60 px-5 py-3.5 dark:border-danger-500/20 dark:bg-danger-500/10">
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-danger-500 text-white shadow-sm">
+                    <x-filament::icon icon="heroicon-o-exclamation-circle" class="h-4 w-4" />
+                </span>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-bold text-danger-800 dark:text-danger-300">
+                        {{ count($failedImports) === 1 ? '1 archivo no se pudo procesar' : count($failedImports) . ' archivos no se pudieron procesar' }}
+                    </p>
+                    <p class="mt-0.5 text-xs text-danger-700 dark:text-danger-400">
+                        Volvé a subir el archivo. Si el problema sigue, contactá a soporte.
+                    </p>
+                </div>
+            </div>
+            <div class="divide-y divide-danger-100 dark:divide-danger-500/10">
+                @foreach ($failedImports as $pi)
+                    <div class="flex items-center gap-4 px-5 py-3.5">
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                                {{ $pi['filename'] }}
+                            </p>
+                            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                {{ \Carbon\Carbon::parse($pi['updated_at'])->diffForHumans() }}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            wire:click="dismissFailedImport({{ $pi['id'] }})"
+                            class="inline-flex items-center justify-center rounded-xl border border-danger-300 bg-white px-3 py-2 text-sm font-medium text-danger-800 shadow-sm transition hover:bg-danger-100 dark:border-danger-500/30 dark:bg-transparent dark:text-danger-300"
+                        >
+                            Ocultar
+                        </button>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
     {{-- ── Importaciones pendientes de validar ────────────────────────────────── --}}
     @if (count($pendingImports) > 0)
         <div class="mb-6 overflow-hidden rounded-2xl border border-warning-200 bg-warning-50 shadow-sm dark:border-warning-500/20 dark:bg-warning-500/5">
@@ -797,4 +878,5 @@
         @endif
     @endif
 
+</div>
 </x-filament-panels::page>

@@ -73,6 +73,14 @@ class ProcessImportFile implements ShouldQueue
             'diagnostics' => $this->serverDiagnostics($import),
         ]);
 
+        if (! in_array($import->status, ['pending', 'processing'], true)) {
+            $this->logInfo('Job skipped, import already resolved', [
+                'status' => $import->status,
+            ]);
+
+            return;
+        }
+
         $import->update(['status' => 'processing']);
 
         try {
@@ -152,6 +160,10 @@ class ProcessImportFile implements ShouldQueue
             $products = $this->detectDuplicates($this->mapToCategories($allExtracted));
             $count = count($products);
 
+            if ($count === 0) {
+                throw new \RuntimeException('No se encontraron productos para importar. El archivo puede tener sólo encabezados o estar vacío. Revisalo y volvé a subirlo.');
+            }
+
             $import->update([
                 'status' => 'done',
                 'products' => $products,
@@ -168,9 +180,7 @@ class ProcessImportFile implements ShouldQueue
             Notification::make()
                 ->title('Importación lista ✓')
                 ->body(
-                    ($count > 0
-                        ? "{$count} ".($count === 1 ? 'producto extraído' : 'productos extraídos')
-                        : 'No se detectaron productos')
+                    "{$count} ".($count === 1 ? 'producto extraído' : 'productos extraídos')
                     ." de \"{$import->filename}\". Revisalos antes de guardar."
                 )
                 ->success()
@@ -634,7 +644,7 @@ class ProcessImportFile implements ShouldQueue
     private function detectDuplicates(array $rows): array
     {
         $existingProducts = Product::query()
-            ->select(['id', 'name', 'barcode', 'cost_price', 'sale_price', 'margin_percentage'])
+            ->select(['id', 'name', 'sku', 'barcode', 'cost_price', 'sale_price', 'margin_percentage'])
             ->get();
 
         $existingByKey = $existingProducts->reduce(function (array $carry, Product $product) {
@@ -650,16 +660,25 @@ class ProcessImportFile implements ShouldQueue
                 $carry['barcode'][mb_strtolower(trim($product->barcode))] = $entry;
             }
 
+            if ($product->sku) {
+                $carry['sku'][mb_strtolower(trim($product->sku))] = $entry;
+            }
+
             $carry['name'][mb_strtolower(trim($product->name))] = $entry;
 
             return $carry;
-        }, ['barcode' => [], 'name' => []]);
+        }, ['barcode' => [], 'sku' => [], 'name' => []]);
 
         $seenBarcodes = [];
+        $seenSkus = [];
         $seenNames = [];
 
+        // No todos los proveedores usan código de barras: si el archivo solo trae
+        // un código interno (sku), lo tratamos igual de válido para detectar
+        // duplicados, tanto contra el catálogo existente como dentro del archivo.
         foreach ($rows as &$row) {
             $barcode = $row['barcode'] ? mb_strtolower(trim($row['barcode'])) : null;
+            $sku = $row['sku'] ? mb_strtolower(trim($row['sku'])) : null;
             $name = mb_strtolower(trim($row['name']));
 
             $existingEntry = null;
@@ -668,17 +687,25 @@ class ProcessImportFile implements ShouldQueue
             if ($barcode && isset($existingByKey['barcode'][$barcode])) {
                 $existingEntry = $existingByKey['barcode'][$barcode];
                 $reason = "Ya existe con este código de barras: \"{$existingEntry['name']}\"";
+            } elseif ($sku && isset($existingByKey['sku'][$sku])) {
+                $existingEntry = $existingByKey['sku'][$sku];
+                $reason = "Ya existe con este SKU: \"{$existingEntry['name']}\"";
             } elseif (isset($existingByKey['name'][$name])) {
                 $existingEntry = $existingByKey['name'][$name];
                 $reason = 'Ya existe un producto con este nombre';
             } elseif ($barcode && isset($seenBarcodes[$barcode])) {
                 $reason = 'Código de barras repetido dentro de este archivo';
+            } elseif ($sku && isset($seenSkus[$sku])) {
+                $reason = 'SKU repetido dentro de este archivo';
             } elseif (isset($seenNames[$name])) {
                 $reason = 'Nombre repetido dentro de este archivo';
             }
 
             if ($barcode) {
                 $seenBarcodes[$barcode] = true;
+            }
+            if ($sku) {
+                $seenSkus[$sku] = true;
             }
             $seenNames[$name] = true;
 

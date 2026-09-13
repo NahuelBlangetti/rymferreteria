@@ -3,7 +3,6 @@
 namespace App\Filament\Pages;
 
 use App\Jobs\ProcessImportFile;
-use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductImport;
 use App\Models\Supplier;
@@ -13,7 +12,6 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -38,9 +36,9 @@ class CargarProductos extends Page
     public function getSubheading(): ?string
     {
         return match ($this->tab) {
-            'rapida'  => 'Escaneá, completá y guardá productos en segundos',
+            'rapida' => 'Escaneá, completá y guardá productos en segundos',
             'archivo' => 'Subí una lista de precios en PDF o Excel y revisá los productos antes de guardarlos',
-            default   => '',
+            default => '',
         };
     }
 
@@ -54,26 +52,48 @@ class CargarProductos extends Page
 
     // ── Carga Rápida ───────────────────────────────────────────────────────
     public string $barcodeInput = '';
-    public string $productName  = '';
-    public string $salePrice    = '';
-    public string $stockInput   = '';
-    public bool   $showForm     = false;
-    public bool   $manualMode   = false;
+
+    public string $productName = '';
+
+    public string $salePrice = '';
+
+    public string $stockInput = '';
+
+    public bool $showForm = false;
+
+    public bool $manualMode = false;
+
     public ?string $lookupSource = null;
-    public int    $sessionCount  = 0;
-    public array  $recentProducts = [];
+
+    public int $sessionCount = 0;
+
+    public array $recentProducts = [];
 
     // ── Importar desde archivo ─────────────────────────────────────────────
     public $importFile = null;
+
     public string $state = 'idle'; // idle | queued | error
+
     public string $errorMessage = '';
-    public array  $supplierOptions = [];
-    public ?int   $importSupplierId = null;
+
+    public array $supplierOptions = [];
+
+    public ?int $importSupplierId = null;
+
     public string $importedFileName = '';
+
     public string $importedFileSize = '';
-    public bool   $supplierAutoDetected = false;
-    public array  $pendingImports = [];
+
+    public bool $supplierAutoDetected = false;
+
+    public array $pendingImports = [];
+
+    public array $processingImports = [];
+
+    public array $failedImports = [];
+
     public ?array $duplicateImport = null;
+
     public string $pendingFileHash = '';
 
     private const MAX_FILE_MB = 25;
@@ -96,7 +116,20 @@ class CargarProductos extends Page
     public function mount(): void
     {
         $this->supplierOptions = Supplier::query()->where('active', true)->orderBy('name')->pluck('name', 'id')->all();
+        $this->refreshImportLists();
+    }
+
+    public function hydrate(): void
+    {
+        $this->refreshImportLists();
+    }
+
+    public function refreshImportLists(): void
+    {
+        ProductImport::expireStale();
         $this->loadPendingImports();
+        $this->loadProcessingImports();
+        $this->loadFailedImports();
     }
 
     public function loadPendingImports(): void
@@ -106,6 +139,65 @@ class CargarProductos extends Page
             ->orderByDesc('processed_at')
             ->get(['id', 'filename', 'product_count', 'processed_at'])
             ->toArray();
+    }
+
+    public function loadProcessingImports(): void
+    {
+        $this->processingImports = ProductImport::where('user_id', auth()->id())
+            ->whereIn('status', ['pending', 'processing'])
+            ->latest()
+            ->get(['id', 'filename', 'status', 'created_at'])
+            ->map(fn (ProductImport $import) => [
+                'id' => $import->id,
+                'filename' => $import->filename,
+                'status' => $import->status,
+                'created_at' => $import->created_at?->toIso8601String(),
+            ])
+            ->all();
+    }
+
+    public function loadFailedImports(): void
+    {
+        $this->failedImports = ProductImport::where('user_id', auth()->id())
+            ->where('status', 'error')
+            ->latest()
+            ->limit(10)
+            ->get(['id', 'filename', 'error_message', 'updated_at'])
+            ->map(fn (ProductImport $import) => [
+                'id' => $import->id,
+                'filename' => $import->filename,
+                'error_message' => $import->error_message,
+                'updated_at' => $import->updated_at?->toIso8601String(),
+            ])
+            ->all();
+    }
+
+    public function cancelProcessingImport(int $importId): void
+    {
+        $import = ProductImport::query()
+            ->where('id', $importId)
+            ->where('user_id', auth()->id())
+            ->whereIn('status', ['pending', 'processing'])
+            ->first();
+
+        $import?->markAsStuck('Cancelado por el usuario.', 'cancelled');
+        $this->refreshImportLists();
+
+        Notification::make()
+            ->title('Importación cancelada')
+            ->success()
+            ->send();
+    }
+
+    public function dismissFailedImport(int $importId): void
+    {
+        ProductImport::query()
+            ->where('id', $importId)
+            ->where('user_id', auth()->id())
+            ->where('status', 'error')
+            ->update(['status' => 'cancelled']);
+
+        $this->refreshImportLists();
     }
 
     public function discardImport(int $importId): void
@@ -122,13 +214,13 @@ class CargarProductos extends Page
                 ->warning()
                 ->send();
 
-            $this->loadPendingImports();
+            $this->refreshImportLists();
 
             return;
         }
 
         $import->cancel();
-        $this->loadPendingImports();
+        $this->refreshImportLists();
 
         Notification::make()
             ->title('Importación eliminada')
@@ -182,19 +274,20 @@ class CargarProductos extends Page
 
             $this->barcodeInput = '';
             $this->dispatch('focus-barcode');
+
             return;
         }
 
-        $this->productName  = '';
-        $this->salePrice    = '';
-        $this->stockInput   = '';
+        $this->productName = '';
+        $this->salePrice = '';
+        $this->stockInput = '';
         $this->lookupSource = null;
-        $this->manualMode   = false;
+        $this->manualMode = false;
 
         $apiName = $this->lookupFromApi($code);
 
         if ($apiName) {
-            $this->productName  = $apiName;
+            $this->productName = $apiName;
             $this->lookupSource = 'api';
         }
 
@@ -205,29 +298,31 @@ class CargarProductos extends Page
     public function startManualEntry(): void
     {
         $this->barcodeInput = '';
-        $this->productName  = '';
-        $this->salePrice    = '';
-        $this->stockInput   = '';
+        $this->productName = '';
+        $this->salePrice = '';
+        $this->stockInput = '';
         $this->lookupSource = null;
-        $this->manualMode   = true;
-        $this->showForm     = true;
+        $this->manualMode = true;
+        $this->showForm = true;
         $this->dispatch('focus-name');
     }
 
     public function saveProduct(): void
     {
-        $name  = trim($this->productName);
+        $name = trim($this->productName);
         $price = (float) str_replace(',', '.', $this->salePrice);
 
         if (empty($name)) {
             Notification::make()->title('Escribí el nombre del producto')->warning()->send();
             $this->dispatch('focus-name');
+
             return;
         }
 
         if ($price <= 0) {
             Notification::make()->title('El precio debe ser mayor a $0')->warning()->send();
             $this->dispatch('focus-price');
+
             return;
         }
 
@@ -247,20 +342,20 @@ class CargarProductos extends Page
         $stock = max(0, (int) str_replace(',', '.', $this->stockInput));
 
         $product = Product::create([
-            'barcode'    => $barcode,
-            'name'       => $name,
+            'barcode' => $barcode,
+            'name' => $name,
             'sale_price' => $price,
             'cost_price' => 0,
-            'stock'      => $stock,
-            'min_stock'  => 0,
-            'unit'       => 'unidad',
-            'active'     => true,
+            'stock' => $stock,
+            'min_stock' => 0,
+            'unit' => 'unidad',
+            'active' => true,
         ]);
 
         $this->sessionCount++;
         array_unshift($this->recentProducts, [
-            'id'    => $product->id,
-            'name'  => $product->name,
+            'id' => $product->id,
+            'name' => $product->name,
             'price' => (float) $product->sale_price,
             'stock' => (int) $product->stock,
         ]);
@@ -289,7 +384,7 @@ class CargarProductos extends Page
 
         unset($this->recentProducts[$index]);
         $this->recentProducts = array_values($this->recentProducts);
-        $this->sessionCount   = max(0, $this->sessionCount - 1);
+        $this->sessionCount = max(0, $this->sessionCount - 1);
 
         Notification::make()
             ->title("'{$name}' eliminado")
@@ -309,12 +404,12 @@ class CargarProductos extends Page
     private function resetRapidaForm(): void
     {
         $this->barcodeInput = '';
-        $this->productName  = '';
-        $this->salePrice    = '';
-        $this->stockInput   = '';
-        $this->showForm     = false;
+        $this->productName = '';
+        $this->salePrice = '';
+        $this->stockInput = '';
+        $this->showForm = false;
         $this->lookupSource = null;
-        $this->manualMode   = false;
+        $this->manualMode = false;
         $this->dispatch('focus-barcode');
     }
 
@@ -327,6 +422,7 @@ class CargarProductos extends Page
 
             if ($response->successful()) {
                 $title = $response->json('items.0.title');
+
                 return $title ? mb_convert_case(mb_strtolower($title), MB_CASE_TITLE) : null;
             }
         } catch (\Throwable) {
@@ -358,6 +454,7 @@ class CargarProductos extends Page
                 ->title("Se seleccionó '{$existing->name}' (ya existía)")
                 ->info()
                 ->send();
+
             return;
         }
 
@@ -378,13 +475,14 @@ class CargarProductos extends Page
         if (! $this->importFile) {
             $this->importedFileName = '';
             $this->importedFileSize = '';
+
             return;
         }
 
         // Capture name and size while the temp file is definitely accessible.
         $this->importedFileName = $this->importFile->getClientOriginalName();
         try {
-            $this->importedFileSize = number_format($this->importFile->getSize() / 1024, 0, ',', '.') . ' KB';
+            $this->importedFileSize = number_format($this->importFile->getSize() / 1024, 0, ',', '.').' KB';
         } catch (\Throwable) {
             $this->importedFileSize = '';
         }
@@ -396,16 +494,16 @@ class CargarProductos extends Page
 
             $existing = ProductImport::where('file_hash', $hash)
                 ->where('user_id', auth()->id())
-                ->whereNotIn('status', ['error'])
+                ->whereNotIn('status', ['error', 'cancelled'])
                 ->latest()
                 ->first();
 
             if ($existing) {
                 $this->duplicateImport = [
-                    'filename'      => $existing->filename,
+                    'filename' => $existing->filename,
                     'product_count' => $existing->product_count,
-                    'processed_at'  => $existing->processed_at?->format('d/m/Y \a\l\a\s H:i'),
-                    'status'        => $existing->status,
+                    'processed_at' => $existing->processed_at?->format('d/m/Y \a\l\a\s H:i'),
+                    'status' => $existing->status,
                 ];
             }
         } catch (\Throwable) {
@@ -485,15 +583,15 @@ class CargarProductos extends Page
         ]);
 
         $originalName = $this->importFile->getClientOriginalName();
-        $extension    = strtolower($this->importFile->getClientOriginalExtension());
+        $extension = strtolower($this->importFile->getClientOriginalExtension());
 
         Log::channel('imports')->info('Import upload started', [
-            'filename'    => $originalName,
-            'extension'   => $extension,
-            'user_id'     => auth()->id(),
+            'filename' => $originalName,
+            'extension' => $extension,
+            'user_id' => auth()->id(),
             'supplier_id' => $this->importSupplierId,
-            'queue'       => config('queue.default'),
-            'memory_mb'   => round(memory_get_usage(true) / 1024 / 1024, 1),
+            'queue' => config('queue.default'),
+            'memory_mb' => round(memory_get_usage(true) / 1024 / 1024, 1),
         ]);
 
         if (! $this->importSupplierId) {
@@ -506,49 +604,50 @@ class CargarProductos extends Page
         try {
             $hash = $this->pendingFileHash ?: hash_file('sha256', $this->importFile->getRealPath());
 
-            $filePath = $this->importFile->storeAs('imports', uniqid('import_') . '.' . $extension, 'local');
+            $filePath = $this->importFile->storeAs('imports', uniqid('import_').'.'.$extension, 'local');
             $this->importFile = null;
 
             $fullPath = Storage::disk('local')->path($filePath);
-            $fileMb   = filesize($fullPath) / 1024 / 1024;
+            $fileMb = filesize($fullPath) / 1024 / 1024;
 
             if ($fileMb > self::MAX_FILE_MB) {
                 Storage::disk('local')->delete($filePath);
-                throw new \RuntimeException("El archivo pesa " . round($fileMb, 1) . " MB. El límite es " . self::MAX_FILE_MB . " MB.");
+                throw new \RuntimeException('El archivo pesa '.round($fileMb, 1).' MB. El límite es '.self::MAX_FILE_MB.' MB.');
             }
 
             $import = ProductImport::create([
-                'user_id'     => auth()->id(),
+                'user_id' => auth()->id(),
                 'supplier_id' => $this->importSupplierId,
-                'filename'    => $originalName,
-                'file_path'   => $filePath,
-                'file_hash'   => $hash,
-                'status'      => 'pending',
+                'filename' => $originalName,
+                'file_path' => $filePath,
+                'file_hash' => $hash,
+                'status' => 'pending',
             ]);
 
             ProcessImportFile::dispatch($import->id);
 
             Log::channel('imports')->info('Import queued', [
                 'import_id' => $import->id,
-                'filename'  => $originalName,
+                'filename' => $originalName,
                 'file_path' => $filePath,
-                'file_mb'   => round($fileMb, 2),
+                'file_mb' => round($fileMb, 2),
                 'file_hash' => $hash,
-                'queue'     => config('queue.default'),
+                'queue' => config('queue.default'),
             ]);
 
             $this->state = 'queued';
+            $this->refreshImportLists();
 
         } catch (\Throwable $e) {
             Log::channel('imports')->error('Import upload failed', [
-                'filename'  => $originalName,
-                'user_id'   => auth()->id(),
-                'error'     => $e->getMessage(),
+                'filename' => $originalName,
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
                 'exception' => $e::class,
-                'file'      => basename($e->getFile()) . ':' . $e->getLine(),
+                'file' => basename($e->getFile()).':'.$e->getLine(),
             ]);
 
-            $this->state        = 'error';
+            $this->state = 'error';
             $this->errorMessage = $e->getMessage();
         }
     }
