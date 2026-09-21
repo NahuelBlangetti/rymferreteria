@@ -212,19 +212,16 @@
                                             />
                                             <span class="text-xs text-gray-500 dark:text-gray-400">{{ $item['unit'] }}</span>
                                         @else
-                                            <button
-                                                wire:click="updateQuantity({{ $index }}, {{ $item['quantity'] - 1 }})"
-                                                type="button"
-                                                class="flex h-6 w-6 items-center justify-center rounded border border-gray-300 bg-gray-50 text-gray-600 transition hover:bg-gray-100 dark:border-white/20 dark:bg-white/5 dark:text-gray-300"
-                                            >−</button>
-                                            <span class="w-7 text-center text-sm font-semibold text-gray-900 dark:text-white">
-                                                {{ (int) $item['quantity'] }}
-                                            </span>
-                                            <button
-                                                wire:click="updateQuantity({{ $index }}, {{ $item['quantity'] + 1 }})"
-                                                type="button"
-                                                class="flex h-6 w-6 items-center justify-center rounded border border-gray-300 bg-gray-50 text-gray-600 transition hover:bg-gray-100 dark:border-white/20 dark:bg-white/5 dark:text-gray-300"
-                                            >+</button>
+                                            <input
+                                                type="number"
+                                                step="1"
+                                                min="1"
+                                                max="{{ $item['stock'] }}"
+                                                value="{{ $item['quantity'] }}"
+                                                aria-label="Cantidad de {{ $item['name'] }}"
+                                                wire:change="updateQuantity({{ $index }}, $event.target.value)"
+                                                class="fi-input w-20 rounded border border-gray-300 bg-gray-50 px-1.5 py-1 text-center text-sm font-semibold text-gray-900 dark:border-white/20 dark:bg-white/5 dark:text-white"
+                                            />
                                         @endif
                                     </div>
                                     <div class="w-20 text-right shrink-0">
